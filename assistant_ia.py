@@ -4,7 +4,7 @@
 # ║   Raspberry Pi 4 — Master IT TAM UM5 2026    ║
 # ╚══════════════════════════════════════════════╝
 
-import os, contextlib
+import os, contextlib, subprocess
 from ultralytics import YOLO
 from picamera2 import Picamera2
 import pytesseract
@@ -12,7 +12,6 @@ import pyaudio, wave
 import threading, time
 import serial, pynmea2
 from gtts import gTTS
-import pygame
 from groq import Groq
 from PIL import Image
 import numpy as np
@@ -107,9 +106,9 @@ camera.configure(config)
 camera.start()
 time.sleep(2)
 
-print('Chargement audio...')
-pygame.mixer.pre_init(44100, -16, 2, 4096)
-pygame.mixer.init()
+print('Vérification mpg123...')
+if subprocess.run(['which', 'mpg123'], capture_output=True).returncode != 0:
+    print('AVERTISSEMENT: mpg123 non installé ! sudo apt install mpg123')
 
 print('Chargement Groq...')
 groq = Groq(api_key=GROQ_API_KEY)
@@ -169,14 +168,9 @@ def parler(texte):
     with audio_lock:
         try:
             print(f'Pi dit: {texte}')
-            pygame.mixer.music.stop()
             gTTS(text=texte, lang='ar').save(AUDIO_MP3)
-            pygame.mixer.music.load(AUDIO_MP3)
-            pygame.mixer.music.play()
-            time.sleep(0.3)  # laisse le Bluetooth démarrer
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.05)
-            time.sleep(0.4)  # vide le buffer Bluetooth avant de continuer
+            # mpg123 bloque jusqu'à la fin réelle — pas de coupe Bluetooth
+            subprocess.run(['mpg123', '-q', AUDIO_MP3], check=False)
         except Exception as e:
             print(f'Erreur audio: {e}')
 
@@ -439,4 +433,3 @@ except KeyboardInterrupt:
     if gps_serial:
         gps_serial.close()
     camera.stop()
-    pygame.quit()
