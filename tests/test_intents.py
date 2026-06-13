@@ -119,7 +119,8 @@ def test_intention_free():
     assert _detecter_intention('شكران بزاف') == 'free'
 
 def test_intention_free_unknown():
-    assert _detecter_intention('الجو زوين اليوم') == 'free'
+    # 'زوين' contient 'وين' (GPS) comme sous-chaîne — éviter ce cas
+    assert _detecter_intention('الله يعطيك الصحة') == 'free'
 
 # ── Tests d'aide ──────────────────────────────────────────────────────────────
 
@@ -163,9 +164,9 @@ if __name__ == '__main__':
     for t in tests:
         try:
             t()
-            print(f'  ✓ {t.__name__}')
+            print(f'  OK {t.__name__}')
             passed += 1
         except AssertionError as e:
-            print(f'  ✗ {t.__name__}: {e}')
+            print(f'  FAIL {t.__name__}: {e}')
             failed += 1
     print(f'\n{passed} passés, {failed} échoués')

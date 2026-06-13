@@ -93,9 +93,9 @@ if __name__ == '__main__':
     for t in tests:
         try:
             t()
-            print(f'  ✓ {t.__name__}')
+            print(f'  OK {t.__name__}')
             passed += 1
         except AssertionError as e:
-            print(f'  ✗ {t.__name__}: {e}')
+            print(f'  FAIL {t.__name__}: {e}')
             failed += 1
     print(f'\n{passed} passés, {failed} échoués')
