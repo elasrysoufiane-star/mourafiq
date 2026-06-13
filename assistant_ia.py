@@ -4,7 +4,7 @@
 # ║   Raspberry Pi 4 — Master IT TAM UM5 2026    ║
 # ╚══════════════════════════════════════════════╝
 
-import os
+import os, contextlib
 from ultralytics import YOLO
 from picamera2 import Picamera2
 import pytesseract
@@ -21,13 +21,12 @@ import numpy as np
 # CONFIGURATION
 # ══════════════════════════════════════════════
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-
 GPS_PORT       = '/dev/ttyS0'
 GPS_BAUD       = 9600
 AUDIO_MP3      = '/tmp/audio.mp3'
 AUDIO_WAV      = '/tmp/audio.wav'
 CONF_SEUIL     = 0.60
-VOL_SEUIL      = 200
+VOL_SEUIL      = 200   # recalibré au démarrage
 
 # ══════════════════════════════════════════════
 # DICTIONNAIRE DARIJA
@@ -76,16 +75,29 @@ traductions = {
 }
 
 # ══════════════════════════════════════════════
+# SUPPRESSION BRUIT ALSA/JACK
+# ══════════════════════════════════════════════
+@contextlib.contextmanager
+def suprimer_alsa():
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stderr = os.dup(2)
+    os.dup2(devnull, 2)
+    os.close(devnull)
+    try:
+        yield
+    finally:
+        os.dup2(old_stderr, 2)
+        os.close(old_stderr)
+
+# ══════════════════════════════════════════════
 # INITIALISATION
 # ══════════════════════════════════════════════
 print('=' * 50)
 print('Chargement Assistant IA Malvoyants...')
 
-# YOLO
 print('Chargement YOLO...')
 model = YOLO('yolov8n.pt')
 
-# Caméra RGB
 print('Chargement caméra...')
 camera = Picamera2()
 config = camera.create_preview_configuration(
@@ -95,13 +107,51 @@ camera.configure(config)
 camera.start()
 time.sleep(2)
 
-# Audio
 print('Chargement audio...')
 pygame.mixer.init()
 
-# Gemini
 print('Chargement Gemini...')
 gemini = genai.Client(api_key=GEMINI_API_KEY)
+
+# GPS — port ouvert une seule fois au démarrage
+print('Connexion GPS...')
+gps_serial = None
+try:
+    gps_serial = serial.Serial(GPS_PORT, GPS_BAUD, timeout=1)
+    print('GPS connecté')
+except Exception as e:
+    print(f'GPS non disponible: {e}')
+
+# Vérification micro
+print('Vérification micro...')
+with suprimer_alsa():
+    _p = pyaudio.PyAudio()
+try:
+    _info = _p.get_default_input_device_info()
+    print(f'Micro détecté: {_info["name"]}')
+except Exception:
+    print('AVERTISSEMENT: Aucun micro détecté !')
+_p.terminate()
+
+# Calibration automatique du seuil de voix
+print('Calibration bruit ambiant (2s)...')
+def calibrer_micro():
+    with suprimer_alsa():
+        p = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16, channels=1,
+                        rate=16000, input=True, frames_per_buffer=1024)
+    volumes = []
+    for _ in range(30):
+        data = stream.read(1024, exception_on_overflow=False)
+        vol  = np.abs(np.frombuffer(data, dtype=np.int16)).mean()
+        volumes.append(vol)
+    stream.stop_stream(); stream.close(); p.terminate()
+    bruit  = float(np.mean(volumes))
+    seuil  = max(150, int(bruit * 3))
+    print(f'Bruit ambiant: {bruit:.0f} → Seuil voix: {seuil}')
+    return seuil
+
+VOL_SEUIL = calibrer_micro()
 
 print('Tout est prêt !')
 print('=' * 50)
@@ -127,8 +177,7 @@ def parler(texte):
             print(f'Erreur audio: {e}')
 
 def gemini_darija(question):
-    try:
-        prompt = f"""أنت مساعد ذكي للمكفوفين في المغرب.
+    prompt = f"""أنت مساعد ذكي للمكفوفين في المغرب.
 تتكلم الدارجة المغربية فقط.
 ردودك قصيرة جدا — جملة واحدة فقط.
 أمثلة على ردودك:
@@ -139,24 +188,29 @@ def gemini_darija(question):
 
 السؤال أو الموقف: {question}"""
 
-        response = gemini.models.generate_content(model='gemini-1.5-flash', contents=prompt)
-        reponse  = response.text.strip()
-        print(f'Gemini darija: {reponse}')
-        return reponse
-    except Exception as e:
-        print(f'Erreur Gemini: {e}')
-        return 'عفوا ماقدرتش نفهم'
+    for tentative in range(3):
+        try:
+            response = gemini.models.generate_content(
+                model='gemini-1.5-flash', contents=prompt
+            )
+            reponse = response.text.strip()
+            print(f'Gemini darija: {reponse}')
+            return reponse
+        except Exception as e:
+            if '429' in str(e) and tentative < 2:
+                attente = 5 * (2 ** tentative)
+                print(f'Quota dépassé, attente {attente}s...')
+                time.sleep(attente)
+            else:
+                print(f'Erreur Gemini: {e}')
+                return 'عفوا ماقدرتش نفهم'
 
 def reconnaitre_voix():
     print('En attente de voix...')
-    p = pyaudio.PyAudio()
-    stream = p.open(
-        format=pyaudio.paInt16,
-        channels=1,
-        rate=16000,
-        input=True,
-        frames_per_buffer=1024
-    )
+    with suprimer_alsa():
+        p      = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16, channels=1,
+                        rate=16000, input=True, frames_per_buffer=1024)
     frames  = []
     silence = 0
     parole  = False
@@ -183,7 +237,6 @@ def reconnaitre_voix():
     if not frames:
         return ''
 
-    # Sauvegarder audio
     wf = wave.open(AUDIO_WAV, 'wb')
     wf.setnchannels(1)
     wf.setsampwidth(2)
@@ -191,20 +244,25 @@ def reconnaitre_voix():
     wf.writeframes(b''.join(frames))
     wf.close()
 
-    # Transcrire avec Gemini
-    try:
-        audio_file = gemini.files.upload(file=AUDIO_WAV)
-        result = gemini.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=[audio_file, 'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق']
-        )
-        gemini.files.delete(name=audio_file.name)
-        texte = result.text.strip()
-        print(f'Compris: {texte}')
-        return texte
-    except Exception as e:
-        print(f'Erreur transcription: {e}')
-        return ''
+    for tentative in range(3):
+        try:
+            audio_file = gemini.files.upload(file=AUDIO_WAV)
+            result = gemini.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=[audio_file, 'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق']
+            )
+            gemini.files.delete(name=audio_file.name)
+            texte = result.text.strip()
+            print(f'Compris: {texte}')
+            return texte
+        except Exception as e:
+            if '429' in str(e) and tentative < 2:
+                attente = 5 * (2 ** tentative)
+                print(f'Quota transcription, attente {attente}s...')
+                time.sleep(attente)
+            else:
+                print(f'Erreur transcription: {e}')
+                return ''
 
 # ══════════════════════════════════════════════
 # MODE 1 — VISION AUTOMATIQUE
@@ -247,15 +305,10 @@ def lire_texte():
         with camera_lock:
             img = camera.capture_array()
         img_pil = Image.fromarray(img)
-        texte   = pytesseract.image_to_string(
-            img_pil, lang='ara+fra'
-        )
+        texte   = pytesseract.image_to_string(img_pil, lang='ara+fra')
         if texte.strip():
             print(f'Texte lu: {texte}')
-            msg = gemini_darija(
-                f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'
-            )
-            parler(msg)
+            parler(gemini_darija(f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'))
         else:
             parler('ماكاين حتى نص')
     except Exception as e:
@@ -266,17 +319,14 @@ def lire_texte():
 # MODE 3 — NAVIGATION GPS
 # ══════════════════════════════════════════════
 def get_gps():
+    if gps_serial is None:
+        return None, None
     try:
-        ser = serial.Serial(GPS_PORT, GPS_BAUD, timeout=1)
         for _ in range(30):
-            ligne = ser.readline().decode(
-                'ascii', errors='ignore'
-            )
+            ligne = gps_serial.readline().decode('ascii', errors='ignore')
             if ligne.startswith('$GPGGA'):
                 msg = pynmea2.parse(ligne)
-                ser.close()
                 return msg.latitude, msg.longitude
-        ser.close()
     except Exception as e:
         print(f'Erreur GPS: {e}')
     return None, None
@@ -309,84 +359,50 @@ def mode_conversation():
 
             print(f'Commande: {commande}')
 
-            # Où suis-je ?
-            if any(m in commande for m in [
-                'وين','فين','أين','موقع','فاين'
-            ]):
+            if any(m in commande for m in ['وين','فين','أين','موقع','فاين']):
                 lat, lon = get_gps()
                 if lat and lat != 0:
-                    msg = f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'
-                    parler(gemini_darija(msg))
+                    parler(gemini_darija(f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'))
                 else:
                     parler('ماقدرتش نلقى موقعك دابا')
 
-            # Quoi devant ?
-            elif any(m in commande for m in [
-                'شنو','قدامي','واش','شوف','وصف'
-            ]):
+            elif any(m in commande for m in ['شنو','قدامي','واش','شوف','وصف']):
                 with camera_lock:
                     img = camera.capture_array()
-                r   = model(img, verbose=False)[0]
-                if r.boxes:
-                    objets = []
-                    for box in r.boxes[:3]:
-                        obj  = r.names[int(box.cls)]
-                        conf = float(box.conf)
-                        if conf > 0.5:
-                            objets.append(obj)
-                    if objets:
-                        msg = f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'
-                        parler(gemini_darija(msg))
-                    else:
-                        parler('الطريق واضحة ماكاين والو')
+                r = model(img, verbose=False)[0]
+                objets = [
+                    r.names[int(box.cls)]
+                    for box in r.boxes[:3]
+                    if float(box.conf) > 0.5
+                ]
+                if objets:
+                    parler(gemini_darija(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
                 else:
                     parler('الطريق واضحة ماكاين والو')
 
-            # Lis
-            elif any(m in commande for m in [
-                'قرا','اقرأ','قراءة'
-            ]):
+            elif any(m in commande for m in ['قرا','اقرأ','قراءة']):
                 lire_texte()
 
-            # Navigation
             elif 'صيدلية' in commande:
                 naviguer('الصيدلية')
-            elif any(m in commande for m in [
-                'سبيطار','مستشفى'
-            ]):
+            elif any(m in commande for m in ['سبيطار','مستشفى']):
                 naviguer('السبيطار')
             elif 'جامع' in commande:
                 naviguer('الجامع')
             elif 'محطة' in commande:
                 naviguer('المحطة')
-            elif any(m in commande for m in [
-                'ودي','روح','مشي'
-            ]):
+            elif any(m in commande for m in ['ودي','روح','مشي']):
                 naviguer('الوجهة')
 
-            # Aide
-            elif any(m in commande for m in [
-                'عاون','مساعدة','شنو تقدر'
-            ]):
-                parler(
-                    'نقدر نعاونك بـ: '
-                    'شنو قدامي، '
-                    'قرا ليا، '
-                    'وين أنا، '
-                    'ودي للصيدلية'
-                )
+            elif any(m in commande for m in ['عاون','مساعدة','شنو تقدر']):
+                parler('نقدر نعاونك بـ: شنو قدامي، قرا ليا، وين أنا، ودي للصيدلية')
 
-            # Arrêt
-            elif any(m in commande for m in [
-                'وقف','بارك','إيقاف','سلام'
-            ]):
+            elif any(m in commande for m in ['وقف','بارك','إيقاف','سلام']):
                 parler('مع السلامة بالتوفيق')
                 break
 
-            # Commande libre
             else:
-                reponse = gemini_darija(commande)
-                parler(reponse)
+                parler(gemini_darija(commande))
 
         except Exception as e:
             conversation_active.clear()
@@ -413,5 +429,7 @@ try:
         time.sleep(1)
 except KeyboardInterrupt:
     print('Arrêt...')
+    if gps_serial:
+        gps_serial.close()
     camera.stop()
     pygame.quit()
