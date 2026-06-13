@@ -13,15 +13,14 @@ import threading, time
 import serial, pynmea2
 from gtts import gTTS
 import pygame
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 import numpy as np
 
 # ══════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════
-#GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_API_KEY = "AQ.Ab8RN6LjmR_lvoQoSc_yWTexleFenmI-OUWMM74l5PLM7GFkzQ"
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 GPS_PORT       = '/dev/ttyS0'
 GPS_BAUD       = 9600
@@ -102,8 +101,7 @@ pygame.mixer.init()
 
 # Gemini
 print('Chargement Gemini...')
-genai.configure(api_key=GEMINI_API_KEY)
-gemini = genai.GenerativeModel('gemini-2.0-flash')
+gemini = genai.Client(api_key=GEMINI_API_KEY)
 
 print('Tout est prêt !')
 print('=' * 50)
@@ -141,7 +139,7 @@ def gemini_darija(question):
 
 السؤال أو الموقف: {question}"""
 
-        response = gemini.generate_content(prompt)
+        response = gemini.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         reponse  = response.text.strip()
         print(f'Gemini darija: {reponse}')
         return reponse
@@ -195,12 +193,12 @@ def reconnaitre_voix():
 
     # Transcrire avec Gemini
     try:
-        audio_file = genai.upload_file(AUDIO_WAV)
-        result = gemini.generate_content([
-            audio_file,
-            'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق'
-        ])
-        genai.delete_file(audio_file.name)
+        audio_file = gemini.files.upload(file=AUDIO_WAV)
+        result = gemini.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=[audio_file, 'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق']
+        )
+        gemini.files.delete(name=audio_file.name)
         texte = result.text.strip()
         print(f'Compris: {texte}')
         return texte
