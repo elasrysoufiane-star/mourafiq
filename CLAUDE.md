@@ -26,10 +26,12 @@ source ~/.bashrc
 ## Dependencies
 
 ```bash
-pip install ultralytics picamera2 pytesseract pyaudio pyserial pynmea2 gtts pygame groq pillow numpy
-sudo apt install tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra
+pip install ultralytics picamera2 pytesseract pyaudio pyserial pynmea2 gtts groq pillow numpy
+sudo apt install tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra mpg123
 git lfs pull   # for yolov8n.pt
 ```
+
+> `pygame` removed — replaced by `mpg123` CLI for reliable Bluetooth audio playback.
 
 ## API — Groq (primary, replaces Gemini)
 
@@ -63,11 +65,11 @@ Two daemon threads launched from `__main__`:
 |-----------|------|---------|
 | `camera_lock` | `threading.Lock` | Serialises all `camera.capture_array()` calls |
 | `audio_lock` | `threading.Lock` | Serialises all `parler()` calls |
-| `conversation_active` | `threading.Event` | Pauses vision announcements while user is speaking |
+| `conversation_active` | `threading.Event` | Pauses vision announcements while user is speaking — **BUG: currently SET during listening too, blocking vision entirely. Must be moved into `parler()` only.** |
 
 ### Key Functions
 
-- **`parler(texte)`** — gTTS → MP3 → pygame; protected by `audio_lock`
+- **`parler(texte)`** — gTTS → MP3 → `mpg123` CLI (blocks until audio truly ends); protected by `audio_lock`
 - **`groq_darija(question)`** — `llama-3.1-8b-instant` with system prompt enforcing single-sentence Moroccan Darija
 - **`reconnaitre_voix()`** — PyAudio VAD → WAV → `whisper-large-v3-turbo` transcription
 - **`lire_texte()`** — camera capture → Pytesseract (`ara+fra`) → `groq_darija()` narration
@@ -119,6 +121,18 @@ Note: HUAWEI FreeBuds SE 3 (MAC `70:40:FF:6E:21:7E`) failed to provide an audio 
 | OCR | **Tesseract** local — free forever | — |
 
 **Gemini status:** New `AQ.Ab8...` key format returns `limit: 0` on `gemini-2.0-flash` and `gemini-2.0-flash-lite`. `gemini-1.5-flash` returns 404. Avoid until quota issue is resolved. If needed, use a personal Gmail account (not Workspace) on aistudio.google.com.
+
+## Known Bugs (to fix)
+
+### conversation_active blocks vision permanently
+**Symptom:** Vision thread never detects objects — long silences.  
+**Root cause:** `mode_conversation()` calls `conversation_active.set()` before `reconnaitre_voix()`, which waits indefinitely for voice. Vision thread sees the event set and sleeps the entire time.  
+**Fix:** Move `conversation_active.set/clear` inside `parler()` only — pause vision only while speaking, not while listening. Vision and listening don't conflict (different resources).
+
+### gTTS network latency
+**Symptom:** 1–2s silence before each speech output.  
+**Cause:** gTTS downloads from Google servers on every call.  
+**Fix (free):** `edge-tts` (Microsoft, runs locally after first download) — `pip install edge-tts`.
 
 ## Known Non-Issues
 
