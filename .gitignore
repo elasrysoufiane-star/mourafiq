@@ -1,6 +1,11 @@
-vosk-model-ar/
-vosk-model-ar-mgb2-0.4.zip
-*.zip
 __pycache__/
 *.pyc
+venv/
+env/
 *.pt
+*.onnx
+*.zip
+vosk-model-*/
+models/
+*.wav
+*.mp4
