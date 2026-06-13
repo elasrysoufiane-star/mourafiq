@@ -2,7 +2,6 @@ __pycache__/
 *.pyc
 venv/
 env/
-*.pt
 *.onnx
 *.zip
 vosk-model-*/
