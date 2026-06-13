@@ -27,7 +27,7 @@ GPS_BAUD       = 9600
 AUDIO_MP3      = '/tmp/audio.mp3'
 AUDIO_WAV      = '/tmp/audio.wav'
 CONF_SEUIL     = 0.60
-VOL_SEUIL      = 500
+VOL_SEUIL      = 200
 
 # ══════════════════════════════════════════════
 # DICTIONNAIRE DARIJA
