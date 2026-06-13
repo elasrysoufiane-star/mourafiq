@@ -1,6 +1,13 @@
 import os
 from pathlib import Path
 
+# Charge automatiquement le fichier .env s'il existe (python-dotenv optionnel)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # sans python-dotenv : utiliser export ou .bashrc manuellement
+
 # Racine du projet (parent de config/)
 BASE_DIR = Path(__file__).parent.parent
 
@@ -9,6 +16,19 @@ BASE_DIR = Path(__file__).parent.parent
 # Sur le Pi : echo 'export GROQ_API_KEY="gsk_..."' >> ~/.bashrc
 # .get() permet d'importer ce module sans la clé (utile pour les tests)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+# ── Mode et providers ─────────────────────────────────────────────────────────
+# DEMO_MODE : 'free' (défaut) ou 'demo' (documentation uniquement, pas de logique)
+DEMO_MODE    = os.environ.get('DEMO_MODE',    'free')
+AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai
+STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
+TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
+
+# ── Clés API optionnelles (payant — laisser vide si non utilisé) ──────────────
+ELEVENLABS_API_KEY  = os.environ.get('ELEVENLABS_API_KEY',  '')
+# Voice ID depuis lab.elevenlabs.io/voice-library — vide = voix par défaut (Adam)
+ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', '')
+OPENAI_API_KEY      = os.environ.get('OPENAI_API_KEY',      '')
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 GPS_PORT = '/dev/ttyS0'

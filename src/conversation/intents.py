@@ -6,7 +6,7 @@ importables et testables sans dépendances matérielles.
 """
 from src.core import state
 from src.audio.speaker import parler
-from src.ai.groq_client import groq_darija
+from src.providers.ai import get_ai_response
 from src.ocr.reader import lire_texte
 from src.gps.location import get_gps, naviguer
 
@@ -29,7 +29,7 @@ def process_command(commande: str) -> bool:
     if any(m in commande for m in KEYWORDS_GPS):
         lat, lon = get_gps()
         if lat and lat != 0:
-            parler(groq_darija(f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'))
+            parler(get_ai_response(f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'))
         else:
             parler('ماقدرتش نلقى موقعك دابا')
 
@@ -44,7 +44,7 @@ def process_command(commande: str) -> bool:
             if float(box.conf) > 0.5
         ]
         if objets:
-            parler(groq_darija(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
+            parler(get_ai_response(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
         else:
             parler('الطريق واضحة ماكاين والو')
 
@@ -75,6 +75,6 @@ def process_command(commande: str) -> bool:
 
     # Question libre → Groq LLaMA
     else:
-        parler(groq_darija(commande))
+        parler(get_ai_response(commande))
 
     return True

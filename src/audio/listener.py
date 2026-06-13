@@ -135,24 +135,6 @@ def reconnaitre_voix() -> str:
 
 
 def _transcrire() -> str:
-    """Envoie le WAV à Groq Whisper, 3 tentatives avec backoff."""
-    for tentative in range(3):
-        try:
-            with open(AUDIO_WAV, 'rb') as f:
-                result = state.groq_client.audio.transcriptions.create(
-                    model='whisper-large-v3-turbo',
-                    file=f,
-                    language='ar'
-                )
-            texte = result.text.strip()
-            print(f'Compris: {texte}')
-            return texte
-        except Exception as e:
-            if '429' in str(e) and tentative < 2:
-                attente = 5 * (2 ** tentative)
-                print(f'Quota Whisper, attente {attente}s...')
-                time.sleep(attente)
-            else:
-                print(f'Erreur transcription: {e}')
-                return ''
-    return ''
+    """Délègue la transcription au provider STT configuré (voir src/providers/stt.py)."""
+    from src.providers.stt import transcribe
+    return transcribe()

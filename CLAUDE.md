@@ -68,16 +68,19 @@ mourafiq/
 ## Import Chain (aucun import circulaire)
 
 ```
-config.settings ──────────────────────────────┐ (stdlib seulement)
+config.settings ──────────────────────────────┐ (stdlib + dotenv seulement)
 src.vision.translations ──────────────────────┤ (rien)
 src.core.state ───────────────────────────────┤ (threading seulement)
-src.audio.speaker    ◄── config, core.state   │
+src.providers.tts    ◄── config               │
+src.providers.stt    ◄── config  (state lazy) │
+src.providers.ai     ◄── config  (groq_client lazy)
+src.audio.speaker    ◄── core.state  (providers.tts lazy dans _jouer_tts)
 src.ai.groq_client   ◄── core.state           │
-src.audio.listener   ◄── config, core.state, audio.speaker
+src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
 src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations
-src.ocr.reader       ◄── core.state, audio.speaker, ai.groq_client
-src.gps.location     ◄── config, core.state, audio.speaker, ai.groq_client
-src.conversation.intents ◄── core.state, audio.speaker, ai.groq_client, ocr.reader, gps.location
+src.ocr.reader       ◄── core.state, audio.speaker, providers.ai
+src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
+src.conversation.intents ◄── core.state, audio.speaker, providers.ai, ocr.reader, gps.location
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
 src.core.app         ◄── config, core.state, audio.speaker, audio.listener,
                           vision.detector, conversation.commands, gps.location
@@ -108,12 +111,32 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 
 ## Key Functions
 
-- **`parler(texte)`** in `src/audio/speaker.py` — sets `conversation_active`, edge-tts (`ar-MA-JamalNeural`) → fallback gTTS → mpg123
-- **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → Whisper; **timeout 8s**
-- **`groq_darija(question)`** in `src/ai/groq_client.py` — LLaMA, 3 retries backoff
+- **`parler(texte)`** in `src/audio/speaker.py` — sets `conversation_active`, délègue à `providers.tts.synthesize()`
+- **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → `providers.stt.transcribe()`; **timeout 8s**
+- **`get_ai_response(question)`** in `src/providers/ai.py` — routage vers `groq_darija()` ou provider futur
+- **`groq_darija(question)`** in `src/ai/groq_client.py` — LLaMA, 3 retries backoff (implémentation)
 - **`process_command(commande)`** in `src/conversation/intents.py` — retourne `False` pour arrêt
 - **`calibrer_micro()`** in `src/audio/listener.py` — mesure bruit ambiant → `VOL_SEUIL`
 - **`suprimer_alsa()`** in `src/audio/listener.py` — contextmanager stderr redirect
+
+## Providers (src/providers/)
+
+Couche de routage — configurer via `.env` (défaut = tout gratuit).
+
+| Variable | Défaut | Options | Fichier |
+|----------|--------|---------|---------|
+| `AI_PROVIDER` | `groq` | `groq`, `openai`* | `src/providers/ai.py` |
+| `STT_PROVIDER` | `groq` | `groq`, `openai`* | `src/providers/stt.py` |
+| `TTS_PROVIDER` | `edge` | `edge`, `gtts`, `elevenlabs` | `src/providers/tts.py` |
+
+*options futures — structure prête, fallback automatique vers groq si clé absente.
+
+**Règles :**
+1. Mode par défaut = gratuit (`groq` + `edge`). Ne jamais changer les défauts dans le code.
+2. Si clé payante absente → message clair + fallback gratuit automatique, jamais d'exception non gérée.
+3. YOLO, Tesseract OCR et GPS restent toujours locaux — jamais de provider cloud pour ces composants.
+4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
+5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire`) — rester testable sur Windows sans matériel.
 
 ## Configuration (config/settings.py)
 
@@ -122,9 +145,14 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 | `GROQ_API_KEY` | `os.environ.get(...)` | Vide si absent (erreur levée dans app.init()) |
 | `CONF_SEUIL` | `0.50` | Seuil confiance YOLO (tester 0.45 si détection insuffisante) |
 | `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
-| `TIMEOUT_ECOUTE` | `≈468 chunks (30s)` | Timeout micro |
+| `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
 | `MODEL_PATH` | `models/yolov8n.pt` | Chemin modèle YOLO |
 | `GPS_PORT` | `/dev/ttyS0` | Port série GPS |
+| `AI_PROVIDER` | `groq` | Provider NLP (groq / openai) |
+| `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
+| `TTS_PROVIDER` | `edge` | Provider TTS (edge / gtts / elevenlabs) |
+| `ELEVENLABS_API_KEY` | `""` | Clé ElevenLabs (vide = fallback edge) |
+| `OPENAI_API_KEY` | `""` | Clé OpenAI (non utilisé par défaut) |
 
 ## Imports matériels — lazy loading
 
@@ -150,6 +178,7 @@ HUAWEI FreeBuds SE 3 (`70:40:FF:6E:21:7E`) : échec PipeWire — ne pas utiliser
 python3 tests/test_config.py
 python3 tests/test_translations.py
 python3 tests/test_intents.py
+python3 tests/test_providers.py
 # ou
 pytest tests/ -v
 ```
@@ -165,6 +194,8 @@ pytest tests/ -v
 | Lazy imports | Picamera2/YOLO/Groq importés dans `init()` seulement | `src/core/app.py` |
 | Refactoring src/ | 10 modules plats → structure `src/` + `config/` | tous |
 | models/ | `yolov8n.pt` déplacé via `git mv` | `models/yolov8n.pt` |
+| Providers | `src/providers/` — AI/STT/TTS configurables via `.env` | `src/providers/` |
+| python-dotenv | Chargement automatique de `.env` au démarrage | `config/settings.py` |
 
 ## Known Non-Issues
 

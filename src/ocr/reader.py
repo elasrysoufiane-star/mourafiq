@@ -17,7 +17,7 @@ except ImportError:
 
 from src.core import state
 from src.audio.speaker import parler
-from src.ai.groq_client import groq_darija
+from src.providers.ai import get_ai_response
 
 
 def lire_texte() -> None:
@@ -40,7 +40,7 @@ def lire_texte() -> None:
 
         if texte.strip():
             print(f'Texte lu: {texte[:100]}...' if len(texte) > 100 else f'Texte lu: {texte}')
-            parler(groq_darija(f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'))
+            parler(get_ai_response(f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'))
         else:
             parler('ماكاين حتى نص')
 

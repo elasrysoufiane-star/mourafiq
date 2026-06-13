@@ -13,7 +13,7 @@ except ImportError:
 from config.settings import GPS_PORT, GPS_BAUD
 from src.core import state
 from src.audio.speaker import parler
-from src.ai.groq_client import groq_darija
+from src.providers.ai import get_ai_response
 
 
 def init_gps():
@@ -62,6 +62,6 @@ def naviguer(destination: str) -> None:
             f'موقعه: {lat:.4f}, {lon:.4f} '
             f'أعطه تعليمات قصيرة بالدارجة'
         )
-        parler(groq_darija(msg))
+        parler(get_ai_response(msg))
     else:
         parler('ماقدرتش نلقى موقعك دابا حاول من برا')

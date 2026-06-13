@@ -17,3 +17,7 @@ edge-tts
 groq
 pillow
 numpy
+python-dotenv
+
+# Optionnel — mode démo uniquement (TTS_PROVIDER=elevenlabs)
+# pip install elevenlabs

@@ -158,6 +158,63 @@ bluetoothctl connect 28:52:E0:23:61:6F
 
 ---
 
+## Mode gratuit vs Mode démo
+
+Mourafiq supporte deux modes de fonctionnement configurés via `.env` :
+
+### Mode gratuit (défaut)
+
+Aucune clé payante requise. Copier `.env.example` en `.env` et laisser `DEMO_MODE=free`.
+
+```bash
+cp .env.example .env
+# Remplir uniquement GROQ_API_KEY
+```
+
+| Composant | Provider | Coût |
+|---|---|---|
+| NLP / Darija | Groq `llama-3.1-8b-instant` | Gratuit (14 400 req/jour) |
+| STT Arabe | Groq `whisper-large-v3-turbo` | Gratuit (7 200 req/jour) |
+| TTS Arabe | edge-tts `ar-MA-JamalNeural` | Gratuit (Microsoft) |
+| Fallback TTS | gTTS | Gratuit |
+| Détection objets | YOLOv8n (local) | Gratuit |
+| OCR | Tesseract (local) | Gratuit |
+| GPS | NMEA série (local) | Gratuit |
+
+### Mode démo (ElevenLabs TTS)
+
+Voix plus naturelle et expressive pour les présentations. Nécessite un compte ElevenLabs.
+
+```bash
+# Dans .env :
+DEMO_MODE=demo
+TTS_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=votre_cle_ici
+ELEVENLABS_VOICE_ID=              # laisser vide = voix Adam (supporte l'arabe)
+```
+
+1. Créer un compte sur [elevenlabs.io](https://elevenlabs.io)
+2. **Profile → API Key** → copier la clé
+3. (Optionnel) Choisir une voix arabophone sur [lab.elevenlabs.io/voice-library](https://lab.elevenlabs.io/voice-library)
+4. Installer le SDK : `pip install elevenlabs`
+
+Si `ELEVENLABS_API_KEY` est absent ou si le quota est dépassé, le système revient automatiquement sur edge-tts sans interruption.
+
+### Changer de provider à chaud
+
+```bash
+# Passer en mode démo
+export TTS_PROVIDER=elevenlabs
+export ELEVENLABS_API_KEY=sk_...
+python3 main.py
+
+# Revenir au mode gratuit
+export TTS_PROVIDER=edge
+python3 main.py
+```
+
+---
+
 ## API utilisées
 
 | Service | Modèle | Quota gratuit |
@@ -166,3 +223,4 @@ bluetoothctl connect 28:52:E0:23:61:6F
 | Groq STT | `whisper-large-v3-turbo` | 7 200 req/jour |
 | edge-tts | `ar-MA-JamalNeural` | Gratuit (Microsoft) |
 | gTTS | — | Gratuit (fallback) |
+| ElevenLabs | `eleven_multilingual_v2` | Payant (mode démo) |
