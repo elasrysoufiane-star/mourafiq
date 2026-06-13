@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════╗
 # ║   Assistant IA — Malvoyants Maroc            ║
-# ║   YOLO + Gemini + GPS + OCR                  ║
+# ║   YOLO + Groq (Whisper + LLaMA) + GPS + OCR ║
 # ║   Raspberry Pi 4 — Master IT TAM UM5 2026    ║
 # ╚══════════════════════════════════════════════╝
 
@@ -13,20 +13,20 @@ import threading, time
 import serial, pynmea2
 from gtts import gTTS
 import pygame
-from google import genai
+from groq import Groq
 from PIL import Image
 import numpy as np
 
 # ══════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GPS_PORT       = '/dev/ttyS0'
-GPS_BAUD       = 9600
-AUDIO_MP3      = '/tmp/audio.mp3'
-AUDIO_WAV      = '/tmp/audio.wav'
-CONF_SEUIL     = 0.60
-VOL_SEUIL      = 200   # recalibré au démarrage
+GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+GPS_PORT     = '/dev/ttyS0'
+GPS_BAUD     = 9600
+AUDIO_MP3    = '/tmp/audio.mp3'
+AUDIO_WAV    = '/tmp/audio.wav'
+CONF_SEUIL   = 0.60
+VOL_SEUIL    = 200  # recalibré au démarrage
 
 # ══════════════════════════════════════════════
 # DICTIONNAIRE DARIJA
@@ -110,8 +110,8 @@ time.sleep(2)
 print('Chargement audio...')
 pygame.mixer.init()
 
-print('Chargement Gemini...')
-gemini = genai.Client(api_key=GEMINI_API_KEY)
+print('Chargement Groq...')
+groq = Groq(api_key=GROQ_API_KEY)
 
 # GPS — port ouvert une seule fois au démarrage
 print('Connexion GPS...')
@@ -146,8 +146,8 @@ def calibrer_micro():
         vol  = np.abs(np.frombuffer(data, dtype=np.int16)).mean()
         volumes.append(vol)
     stream.stop_stream(); stream.close(); p.terminate()
-    bruit  = float(np.mean(volumes))
-    seuil  = max(150, int(bruit * 3))
+    bruit = float(np.mean(volumes))
+    seuil = max(150, int(bruit * 3))
     print(f'Bruit ambiant: {bruit:.0f} → Seuil voix: {seuil}')
     return seuil
 
@@ -176,25 +176,28 @@ def parler(texte):
         except Exception as e:
             print(f'Erreur audio: {e}')
 
-def gemini_darija(question):
-    prompt = f"""أنت مساعد ذكي للمكفوفين في المغرب.
-تتكلم الدارجة المغربية فقط.
-ردودك قصيرة جدا — جملة واحدة فقط.
-أمثلة على ردودك:
-- كاين كرسي قدامك
-- سير على اليمين بعد 50 متر
-- الطريق واضحة ماكاين والو
-- مكتوب صيدلية الأمل
-
-السؤال أو الموقف: {question}"""
-
+def groq_darija(question):
     for tentative in range(3):
         try:
-            response = gemini.models.generate_content(
-                model='gemini-2.0-flash-lite', contents=prompt
+            response = groq.chat.completions.create(
+                model='llama-3.1-8b-instant',
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': (
+                            'أنت مساعد ذكي للمكفوفين في المغرب. '
+                            'تتكلم الدارجة المغربية فقط. '
+                            'ردودك قصيرة جدا — جملة واحدة فقط. '
+                            'أمثلة: كاين كرسي قدامك / سير على اليمين بعد 50 متر / مكتوب صيدلية الأمل'
+                        )
+                    },
+                    {'role': 'user', 'content': question}
+                ],
+                max_tokens=80,
+                temperature=0.3
             )
-            reponse = response.text.strip()
-            print(f'Gemini darija: {reponse}')
+            reponse = response.choices[0].message.content.strip()
+            print(f'Groq darija: {reponse}')
             return reponse
         except Exception as e:
             if '429' in str(e) and tentative < 2:
@@ -202,7 +205,7 @@ def gemini_darija(question):
                 print(f'Quota dépassé, attente {attente}s...')
                 time.sleep(attente)
             else:
-                print(f'Erreur Gemini: {e}')
+                print(f'Erreur Groq: {e}')
                 return 'عفوا ماقدرتش نفهم'
 
 def reconnaitre_voix():
@@ -246,13 +249,13 @@ def reconnaitre_voix():
 
     for tentative in range(3):
         try:
-            audio_file = gemini.files.upload(file=AUDIO_WAV)
-            result = gemini.models.generate_content(
-                model='gemini-2.0-flash-lite',
-                contents=[audio_file, 'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق']
-            )
-            gemini.files.delete(name=audio_file.name)
-            texte = result.text.strip()
+            with open(AUDIO_WAV, 'rb') as f:
+                transcription = groq.audio.transcriptions.create(
+                    model='whisper-large-v3-turbo',
+                    file=f,
+                    language='ar'
+                )
+            texte = transcription.text.strip()
             print(f'Compris: {texte}')
             return texte
         except Exception as e:
@@ -308,7 +311,7 @@ def lire_texte():
         texte   = pytesseract.image_to_string(img_pil, lang='ara+fra')
         if texte.strip():
             print(f'Texte lu: {texte}')
-            parler(gemini_darija(f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'))
+            parler(groq_darija(f'مكتوب في الصورة: {texte} — قل ذلك بالدارجة'))
         else:
             parler('ماكاين حتى نص')
     except Exception as e:
@@ -339,7 +342,7 @@ def naviguer(destination):
             f'موقعه: {lat:.4f}, {lon:.4f} '
             f'أعطه تعليمات قصيرة بالدارجة'
         )
-        parler(gemini_darija(msg))
+        parler(groq_darija(msg))
     else:
         parler('ماقدرتش نلقى موقعك دابا حاول من برا')
 
@@ -362,7 +365,7 @@ def mode_conversation():
             if any(m in commande for m in ['وين','فين','أين','موقع','فاين']):
                 lat, lon = get_gps()
                 if lat and lat != 0:
-                    parler(gemini_darija(f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'))
+                    parler(groq_darija(f'موقع المستخدم: {lat:.4f}, {lon:.4f} أخبره بالدارجة'))
                 else:
                     parler('ماقدرتش نلقى موقعك دابا')
 
@@ -376,7 +379,7 @@ def mode_conversation():
                     if float(box.conf) > 0.5
                 ]
                 if objets:
-                    parler(gemini_darija(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
+                    parler(groq_darija(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
                 else:
                     parler('الطريق واضحة ماكاين والو')
 
@@ -402,7 +405,7 @@ def mode_conversation():
                 break
 
             else:
-                parler(gemini_darija(commande))
+                parler(groq_darija(commande))
 
         except Exception as e:
             conversation_active.clear()

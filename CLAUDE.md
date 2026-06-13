@@ -9,113 +9,119 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Running the Application
 
 ```bash
-# Activate the virtualenv first (Pi path)
 source /home/som/projet_ia/bin/activate
-
-# Set the API key if not already in ~/.bashrc
-export GEMINI_API_KEY="AQ.Ab8RN6..."
-
-# Run
+cd ~/morafiq
 python3 assistant_ia.py
 ```
 
-The app requires physical hardware: PiCamera2, microphone, speaker, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine.
+The app requires physical hardware: PiCamera2, microphone, speaker/headphones, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine.
 
-To make the venv and API key permanent on the Pi:
+Make permanent in `~/.bashrc`:
 ```bash
 echo 'source /home/som/projet_ia/bin/activate' >> ~/.bashrc
-echo 'export GEMINI_API_KEY="your-key-here"' >> ~/.bashrc
+echo 'export GROQ_API_KEY="your-key-here"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 ## Dependencies
 
-Install inside the virtualenv on the Raspberry Pi:
-
 ```bash
-pip install ultralytics picamera2 pytesseract pyaudio pyserial pynmea2 gtts pygame google-genai pillow numpy
-```
-
-> **Note:** The package is `google-genai` (new SDK), NOT `google-generativeai` (deprecated).
-
-Tesseract must also be installed system-wide with Arabic and French language packs:
-
-```bash
+pip install ultralytics picamera2 pytesseract pyaudio pyserial pynmea2 gtts pygame groq pillow numpy
 sudo apt install tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra
+git lfs pull   # for yolov8n.pt
 ```
 
-The YOLO model `yolov8n.pt` is stored via Git LFS — run `git lfs pull` after cloning.
+## API — Groq (primary, replaces Gemini)
+
+**Groq** is the current AI backend. It replaced Google Gemini due to persistent `limit: 0` quota issues with the new `AQ.Ab8...` Gemini key format.
+
+| Feature | Groq model | Free tier |
+|---------|-----------|-----------|
+| NLP / Darija | `llama-3.1-8b-instant` | 14,400 req/day, 30 RPM |
+| Voice → Text | `whisper-large-v3-turbo` | 7,200 req/day |
+
+Get a free API key at **console.groq.com** → API Keys.
+
+```bash
+export GROQ_API_KEY="gsk_..."
+```
+
+The Groq key format is `gsk_...` — no upload/delete cycle needed for audio (sent directly as bytes).
 
 ## Architecture
 
-The application runs two daemon threads launched from `__main__`:
+Two daemon threads launched from `__main__`:
 
 | Thread | Function | Description |
 |--------|----------|-------------|
-| Vision | `mode_vision()` | Continuous YOLO object detection loop; announces newly-detected objects in Darija via `parler()` |
-| Conversation | `mode_conversation()` | Listens for voice commands via `reconnaitre_voix()`, routes to appropriate handler |
+| Vision | `mode_vision()` | Continuous YOLO loop; announces detected objects in Darija via `parler()` |
+| Conversation | `mode_conversation()` | VAD loop → Groq Whisper STT → command router |
 
 ### Thread Synchronisation
-
-Three primitives prevent race conditions between the two threads:
 
 | Primitive | Type | Purpose |
 |-----------|------|---------|
 | `camera_lock` | `threading.Lock` | Serialises all `camera.capture_array()` calls |
-| `audio_lock` | `threading.Lock` | Serialises all `parler()` calls (single pygame channel) |
-| `conversation_active` | `threading.Event` | Vision thread sleeps while the user is speaking |
+| `audio_lock` | `threading.Lock` | Serialises all `parler()` calls |
+| `conversation_active` | `threading.Event` | Pauses vision announcements while user is speaking |
 
 ### Key Functions
 
-- **`parler(texte)`** — gTTS → MP3 → pygame playback for Arabic TTS; protected by `audio_lock`
-- **`gemini_darija(question)`** — calls `gemini-1.5-flash` via `client.models.generate_content()` with a system prompt constraining replies to single-sentence Moroccan Darija
-- **`reconnaitre_voix()`** — PyAudio VAD loop; writes captured speech to `/tmp/audio.wav`, uploads via `client.files.upload()`, transcribes with Gemini multimodal, then deletes the remote file
-- **`lire_texte()`** — captures frame under `camera_lock`, runs Pytesseract (`ara+fra`), passes result to `gemini_darija()` for Darija narration
-- **`get_gps()`** — reads NMEA sentences from the serial GPS module, returns `(lat, lon)`
-- **`naviguer(destination)`** — combines GPS coordinates with `gemini_darija()` to give turn-by-turn guidance
+- **`parler(texte)`** — gTTS → MP3 → pygame; protected by `audio_lock`
+- **`groq_darija(question)`** — `llama-3.1-8b-instant` with system prompt enforcing single-sentence Moroccan Darija
+- **`reconnaitre_voix()`** — PyAudio VAD → WAV → `whisper-large-v3-turbo` transcription
+- **`lire_texte()`** — camera capture → Pytesseract (`ara+fra`) → `groq_darija()` narration
+- **`get_gps()`** — reads NMEA from persistent serial connection `gps_serial`
+- **`naviguer(destination)`** — GPS + `groq_darija()` for turn-by-turn guidance
+- **`calibrer_micro()`** — measures ambient noise at startup, sets `VOL_SEUIL = max(150, ambient×3)`
+- **`suprimer_alsa()`** — context manager that redirects stderr to suppress ALSA/JACK noise
 
-### Configuration Constants (top of `assistant_ia.py`)
+### Configuration Constants
 
 | Constant | Default | Purpose |
 |----------|---------|---------|
-| `GEMINI_API_KEY` | `os.environ["GEMINI_API_KEY"]` | Read from environment — never hardcode |
-| `GPS_PORT` | `/dev/ttyS0` | Serial port for GPS module |
-| `GPS_BAUD` | `9600` | GPS baud rate |
-| `CONF_SEUIL` | `0.60` | YOLO confidence threshold for announcements |
-| `VOL_SEUIL` | `200` | Microphone volume threshold for VAD (calibrated for Pi USB mic) |
+| `GROQ_API_KEY` | `os.environ["GROQ_API_KEY"]` | Never hardcode |
+| `GPS_PORT` | `/dev/ttyS0` | Serial port for GPS |
+| `CONF_SEUIL` | `0.60` | YOLO confidence threshold |
+| `VOL_SEUIL` | auto-calibrated | Set at startup from ambient noise measurement |
 
 ### Object Dictionary
 
-`traductions` maps YOLO COCO class names → Darija announcement strings. Add entries here to support additional object classes.
+`traductions` maps YOLO COCO class names → Darija strings. Add entries here for new object classes.
 
-## Gemini API Notes
+## Audio / Bluetooth Setup (Raspberry Pi)
 
-- **SDK:** Uses `google.genai` (new) via `from google import genai`. The old `google.generativeai` package is fully deprecated and incompatible with the new `AQ.Ab8...` key format.
-- **Client:** `gemini = genai.Client(api_key=GEMINI_API_KEY)` — one global client, no `.configure()` call needed.
-- **Model:** `gemini-1.5-flash` — chosen over `gemini-2.0-flash` to avoid free-tier quota exhaustion during testing.
-- **Quota:** Free tier quotas are per-project and per-day. If you hit `429 RESOURCE_EXHAUSTED`, create a new API key in a new Google Cloud project on aistudio.google.com/apikey.
-- **API key format:** New Gemini keys start with `AQ.Ab8RN6...` (not `AIzaSy...`). Both formats are valid depending on the project.
-- **File cleanup:** Audio files uploaded via `client.files.upload()` are deleted immediately after transcription with `client.files.delete()`.
+The Pi uses **PipeWire** as its audio system (Raspberry Pi OS Trixie).
 
-## Known Non-Issues (safe to ignore)
-
-The following messages appear at every startup and are harmless — PyAudio enumerating non-existent audio devices:
-
-```
-ALSA lib pcm.c:2722 Unknown PCM cards.pcm.*
-Cannot connect to server socket ... jack server is not running
-JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1
-```
-
-To suppress them, redirect stderr when launching:
+**Bluetooth headphones (oraimo SpaceBuds Air — MAC `28:52:E0:23:61:6F`):**
 ```bash
-python3 assistant_ia.py 2>/dev/null
+bluetoothctl connect 28:52:E0:23:61:6F
+pactl set-default-sink $(pactl list sinks short | grep bluez | awk '{print $2}')
 ```
 
-## Suggested Improvements
+**If Bluetooth sink doesn't appear** after reboot:
+```bash
+systemctl --user start wireplumber pipewire pipewire-pulse
+bluetoothctl connect 28:52:E0:23:61:6F
+pactl list sinks short
+```
 
-- **Retry on quota error:** Wrap `gemini_darija()` and `reconnaitre_voix()` with exponential backoff for `429` errors instead of silently returning empty string.
-- **Startup audio check:** Call `arecord -l` at startup and warn if no input device is found, instead of failing silently later.
-- **GPS serial port:** Open the serial port once at startup (not per-call in `get_gps()`) to avoid repeated open/close overhead.
-- **ALSA noise suppression:** Add `2>/dev/null` or configure `/etc/asound.conf` to suppress PyAudio enumeration spam.
-- **VAD calibration:** Print live volume in first 2 seconds at startup to auto-detect ambient noise and set `VOL_SEUIL` dynamically.
+Note: HUAWEI FreeBuds SE 3 (MAC `70:40:FF:6E:21:7E`) failed to provide an audio sink via PipeWire. oraimo SpaceBuds Air worked immediately.
+
+## Free/Cheap API Alternatives
+
+| Need | Best Free | Cheap paid |
+|------|-----------|------------|
+| NLP (Darija) | **Groq** `llama-3.1-8b-instant` — 14,400/day | Gemini 1.5 Flash $0.075/1M tokens |
+| STT (Arabic) | **Groq** `whisper-large-v3-turbo` — 7,200/day | OpenAI Whisper $0.006/min |
+| TTS (Arabic) | **gTTS** free (internet) | Edge-TTS free (Microsoft, offline-capable) |
+| Object detection | **YOLOv8n** local — free forever | — |
+| OCR | **Tesseract** local — free forever | — |
+
+**Gemini status:** New `AQ.Ab8...` key format returns `limit: 0` on `gemini-2.0-flash` and `gemini-2.0-flash-lite`. `gemini-1.5-flash` returns 404. Avoid until quota issue is resolved. If needed, use a personal Gmail account (not Workspace) on aistudio.google.com.
+
+## Known Non-Issues
+
+ALSA/JACK spam at startup is suppressed by `suprimer_alsa()` context manager around PyAudio init. These are harmless enumeration errors.
+
+The `Picamera2.close()` traceback on `KeyboardInterrupt` is a known PiCamera2 bug — does not affect functionality.
