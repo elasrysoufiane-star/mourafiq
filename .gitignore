@@ -1,16 +1,29 @@
 __pycache__/
 *.pyc
+*.pyo
 venv/
 env/
 *.onnx
 *.zip
 vosk-model-*/
-*.wav
 *.mp4
 
-# Répertoires générés au runtime
-temp/
-logs/
+# Fichiers audio générés au runtime (temp/ est tracké via .gitkeep)
+temp/*.mp3
+temp/*.wav
 
-# Variables d'environnement — ne jamais committer
+# Logs (logs/ est tracké via .gitkeep)
+logs/*.log
+logs/*.txt
+
+# Variables d'environnement — ne JAMAIS committer
 .env
+
+# Windows
+desktop.ini
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage

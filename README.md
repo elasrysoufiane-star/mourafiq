@@ -11,10 +11,48 @@ Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes
 **Fonctionnalités :**
 - Détection d'objets en temps réel (YOLOv8n)
 - Lecture de texte arabe et français (Tesseract OCR)
-- Reconnaissance vocale en arabe (Groq Whisper)
+- Reconnaissance vocale arabe (Groq Whisper)
 - Réponses en darija (Groq LLaMA 3.1)
 - Navigation GPS avec instructions vocales
-- Sortie audio via Bluetooth (mpg123 + PipeWire)
+- Sortie audio Bluetooth (edge-tts + mpg123 + PipeWire)
+
+---
+
+## Structure du projet
+
+```
+mourafiq/
+├── main.py                    # Point d'entrée
+├── config/
+│   └── settings.py            # Constantes (ports, seuils, chemins, voix)
+├── src/
+│   ├── core/
+│   │   ├── state.py           # État partagé entre threads
+│   │   └── app.py             # Initialisation matériel + boucle principale
+│   ├── audio/
+│   │   ├── speaker.py         # parler() — edge-tts/gTTS + mpg123
+│   │   └── listener.py        # reconnaitre_voix() — VAD + Whisper
+│   ├── vision/
+│   │   ├── detector.py        # mode_vision() — boucle YOLO
+│   │   └── translations.py    # Dict YOLO class → phrase darija
+│   ├── ocr/
+│   │   └── reader.py          # lire_texte() — Tesseract ara+fra
+│   ├── gps/
+│   │   └── location.py        # get_gps(), naviguer()
+│   ├── ai/
+│   │   └── groq_client.py     # groq_darija() — LLaMA 3.1
+│   └── conversation/
+│       ├── intents.py         # process_command() + constantes KEYWORDS_*
+│       └── commands.py        # mode_conversation() — thread écoute
+├── models/
+│   └── yolov8n.pt             # Modèle YOLO (Git LFS)
+├── tests/
+│   ├── test_config.py
+│   ├── test_translations.py
+│   └── test_intents.py
+├── temp/                      # Fichiers audio temporaires (auto-créé)
+└── logs/                      # Logs runtime (auto-créé)
+```
 
 ---
 
@@ -24,7 +62,8 @@ Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes
 
 ```bash
 sudo apt update
-sudo apt install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra mpg123 python3-picamera2
+sudo apt install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra \
+                   mpg123 python3-picamera2
 ```
 
 ### 2. Environnement virtuel
@@ -38,11 +77,11 @@ pip install -r requirements.txt
 ### 3. Clé API Groq (gratuite)
 
 1. Créer un compte sur [console.groq.com](https://console.groq.com)
-2. Aller dans **API Keys** → **Create API Key**
-3. Copier la clé (format `gsk_...`)
+2. **API Keys → Create API Key** (format `gsk_...`)
+3. Ajouter dans `~/.bashrc` :
 
 ```bash
-echo 'export GROQ_API_KEY="gsk_votre_cle_ici"' >> ~/.bashrc
+echo 'export GROQ_API_KEY="gsk_votre_cle"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -50,9 +89,7 @@ source ~/.bashrc
 
 ```bash
 cd ~/mourafiq
-git lfs pull          # télécharge yolov8n.pt via Git LFS
-# Optionnel : déplacer dans models/
-mkdir -p models && mv yolov8n.pt models/
+git lfs pull   # télécharge models/yolov8n.pt via Git LFS
 ```
 
 ---
@@ -76,37 +113,29 @@ python3 main.py
 
 | Commande darija | Action |
 |---|---|
-| `شنو قدامي` / `شوف` | Décrit les objets devant la caméra |
-| `قرا ليا` | Lit le texte visible (OCR) |
-| `وين أنا` / `فاين أنا` | Indique la position GPS actuelle |
+| `شنو قدامي` / `شوف` / `وصف` | Décrit les objets visibles |
+| `قرا ليا` / `اقرأ` | Lit le texte (OCR) |
+| `وين أنا` / `فاين أنا` | Position GPS actuelle |
 | `ودي للصيدلية` | Navigation vers la pharmacie |
 | `ودي للسبيطار` | Navigation vers l'hôpital |
 | `ودي للجامع` | Navigation vers la mosquée |
 | `ودي للمحطة` | Navigation vers la gare |
-| `عاونني` / `مساعدة` | Liste les commandes disponibles |
-| `وقف` / `سلام` | Arrête l'assistant |
+| `عاونني` / `مساعدة` | Liste les commandes |
+| `وقف` / `بارك` / `سلام` | Arrête l'assistant |
 
 ---
 
-## Structure du projet
+## Tests (Windows & Linux)
 
-```
-mourafiq/
-├── main.py          # Point d'entrée — init + threads
-├── config.py        # Constantes (ports, seuils, chemins)
-├── state.py         # État partagé entre threads (locks, caméra, modèle)
-├── audio.py         # parler() — edge-tts/gTTS + mpg123
-├── vision.py        # Thread YOLO — détection continue
-├── conversation.py  # Thread micro — écoute et dispatch
-├── intents.py       # Routage des commandes vocales
-├── groq_service.py  # groq_darija() + reconnaitre_voix()
-├── ocr_reader.py    # Tesseract OCR
-├── gps.py           # GPS série + navigation
-├── translations.py  # Classes YOLO → phrases darija
-├── requirements.txt
-├── models/          # yolov8n.pt (optionnel, sinon racine)
-├── temp/            # Fichiers audio temporaires (auto-créé)
-└── logs/            # Logs (auto-créé)
+```bash
+# Depuis la racine du projet
+python3 tests/test_config.py
+python3 tests/test_translations.py
+python3 tests/test_intents.py
+
+# Avec pytest (si installé)
+pip install pytest
+pytest tests/ -v
 ```
 
 ---
@@ -117,20 +146,15 @@ mourafiq/
 ```bash
 systemctl --user start wireplumber pipewire pipewire-pulse
 bluetoothctl connect 28:52:E0:23:61:6F
-pactl list sinks short
 ```
 
-**Vision ne détecte rien :**
-- Vérifier que `GROQ_API_KEY` est défini (`echo $GROQ_API_KEY`)
-- Réduire `CONF_SEUIL` à `0.45` dans `config.py`
+**Vision muette :**
+- Vérifier `echo $GROQ_API_KEY`
+- Réduire `CONF_SEUIL` à `0.45` dans `config/settings.py`
 
 **Micro ne répond pas :**
-- Vérifier avec `arecord -l` que le micro est détecté
-- Relancer `main.py` dans un environnement silencieux pour une meilleure calibration
-
-**Quota Groq dépassé :**
-- Groq offre 14 400 req/jour (LLM) et 7 200 req/jour (Whisper) gratuitement
-- Vérifier l'utilisation sur [console.groq.com](https://console.groq.com)
+- Vérifier avec `arecord -l`
+- Relancer dans un environnement silencieux pour recalibration
 
 ---
 
@@ -140,5 +164,5 @@ pactl list sinks short
 |---|---|---|
 | Groq NLP | `llama-3.1-8b-instant` | 14 400 req/jour |
 | Groq STT | `whisper-large-v3-turbo` | 7 200 req/jour |
-| edge-tts TTS | `ar-MA-JamalNeural` | Gratuit (Microsoft) |
-| gTTS (fallback) | — | Gratuit (Google) |
+| edge-tts | `ar-MA-JamalNeural` | Gratuit (Microsoft) |
+| gTTS | — | Gratuit (fallback) |

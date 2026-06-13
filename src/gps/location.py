@@ -1,17 +1,28 @@
-import serial
-import pynmea2
+"""
+Module GPS — connexion série NMEA et navigation vocale.
+Le port GPS est optionnel : si absent, les fonctions GPS retournent None.
+"""
+try:
+    import serial
+    import pynmea2
+    _GPS_OK = True
+except ImportError:
+    _GPS_OK = False
+    print('AVERTISSEMENT: pyserial/pynmea2 absent — GPS désactivé')
 
-from config import GPS_PORT, GPS_BAUD
-import state
-from audio import parler
-from groq_service import groq_darija
+from config.settings import GPS_PORT, GPS_BAUD
+from src.core import state
+from src.audio.speaker import parler
+from src.ai.groq_client import groq_darija
 
 
 def init_gps():
     """
     Ouvre la connexion série vers le module GPS.
-    Retourne l'objet serial ou None si le GPS n'est pas disponible.
+    Retourne l'objet serial.Serial ou None si indisponible.
     """
+    if not _GPS_OK:
+        return None
     try:
         ser = serial.Serial(GPS_PORT, GPS_BAUD, timeout=1)
         print('GPS connecté')
@@ -21,12 +32,12 @@ def init_gps():
         return None
 
 
-def get_gps():
+def get_gps() -> tuple:
     """
     Lit les trames NMEA et retourne (latitude, longitude).
-    Retourne (None, None) si le GPS est absent ou sans fix.
+    Retourne (None, None) si GPS absent ou sans fix satellite.
     """
-    if state.gps_serial is None:
+    if state.gps_serial is None or not _GPS_OK:
         return None, None
     try:
         for _ in range(30):
@@ -39,9 +50,9 @@ def get_gps():
     return None, None
 
 
-def naviguer(destination):
+def naviguer(destination: str) -> None:
     """
-    Récupère la position GPS actuelle et demande à Groq des instructions
+    Récupère la position GPS et demande à Groq LLaMA des instructions
     de navigation vers la destination en darija.
     """
     lat, lon = get_gps()

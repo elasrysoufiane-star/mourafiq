@@ -14,157 +14,169 @@ cd ~/mourafiq
 python3 main.py
 ```
 
-The app requires physical hardware: PiCamera2, microphone, speaker/headphones, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine.
+The app requires physical hardware: PiCamera2, microphone, speaker/headphones, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine without mocking.
 
-Make permanent in `~/.bashrc`:
 ```bash
-echo 'source /home/som/projet_ia/bin/activate' >> ~/.bashrc
-echo 'export GROQ_API_KEY="gsk_..."' >> ~/.bashrc
-source ~/.bashrc
+echo 'export GROQ_API_KEY="gsk_..."' >> ~/.bashrc && source ~/.bashrc
 ```
-
-> `assistant_ia.py` est déprécié — utiliser `main.py`.
 
 ## Dependencies
 
 ```bash
 pip install -r requirements.txt
 sudo apt install tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra mpg123 python3-picamera2
-git lfs pull   # for yolov8n.pt
+git lfs pull   # models/yolov8n.pt
 ```
-
-## API — Groq (backend principal)
-
-**Groq** remplace Google Gemini (quota `limit: 0` sur tous les modèles avec la clé `AQ.Ab8...`).
-
-| Feature | Groq model | Free tier |
-|---------|-----------|-----------|
-| NLP / Darija | `llama-3.1-8b-instant` | 14 400 req/day, 30 RPM |
-| Voice → Text | `whisper-large-v3-turbo` | 7 200 req/day |
-
-Get a free API key at **console.groq.com** → API Keys. Format: `gsk_...`
 
 ## Architecture — Structure des fichiers
 
 ```
 mourafiq/
-├── main.py          # Point d'entrée — init matériel + threads
-├── config.py        # Constantes (GROQ_API_KEY, ports, seuils, chemins)
-├── state.py         # État partagé entre threads (locks, camera, model, groq_client)
-├── audio.py         # parler(), suprimer_alsa(), calibrer_micro()
-├── vision.py        # mode_vision() — boucle YOLO
-├── conversation.py  # mode_conversation() — boucle micro
-├── intents.py       # process_command() — routage commandes vocales
-├── groq_service.py  # groq_darija() + reconnaitre_voix()
-├── ocr_reader.py    # lire_texte() — Tesseract
-├── gps.py           # init_gps(), get_gps(), naviguer()
-├── translations.py  # dict YOLO COCO class → phrase darija
-├── requirements.txt
-├── models/          # yolov8n.pt (optionnel — sinon racine)
-├── temp/            # audio.mp3, audio.wav (auto-créé par main.py)
-└── logs/            # logs (auto-créé par main.py)
+├── main.py                         # Point d'entrée minimal → src.core.app.main()
+├── config/
+│   ├── __init__.py
+│   └── settings.py                 # Toutes les constantes de configuration
+├── src/
+│   ├── core/
+│   │   ├── state.py                # Locks, events, objets matériels partagés
+│   │   └── app.py                  # init() + main() — hardware lazy-loaded
+│   ├── audio/
+│   │   ├── speaker.py              # parler(), suprimer_alsa(), calibrer_micro()
+│   │   └── listener.py             # reconnaitre_voix(), _transcrire()
+│   ├── vision/
+│   │   ├── detector.py             # mode_vision() — boucle YOLO
+│   │   └── translations.py         # Dict YOLO COCO → phrases darija
+│   ├── ocr/
+│   │   └── reader.py               # lire_texte() — Tesseract ara+fra
+│   ├── gps/
+│   │   └── location.py             # init_gps(), get_gps(), naviguer()
+│   ├── ai/
+│   │   └── groq_client.py          # groq_darija() — llama-3.1-8b-instant
+│   └── conversation/
+│       ├── intents.py              # KEYWORDS_* + process_command()
+│       └── commands.py             # mode_conversation() — thread écoute
+├── models/
+│   └── yolov8n.pt                  # Git LFS
+├── tests/
+│   ├── test_config.py
+│   ├── test_translations.py
+│   └── test_intents.py
+├── temp/                           # audio.mp3, audio.wav (auto-créé)
+└── logs/                           # Logs runtime (auto-créé)
 ```
+
+## Import Chain (aucun import circulaire)
+
+```
+config.settings ──────────────────────────────┐ (stdlib seulement)
+src.vision.translations ──────────────────────┤ (rien)
+src.core.state ───────────────────────────────┤ (threading seulement)
+src.audio.speaker    ◄── config, core.state   │
+src.ai.groq_client   ◄── core.state           │
+src.audio.listener   ◄── config, core.state, audio.speaker
+src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations
+src.ocr.reader       ◄── core.state, audio.speaker, ai.groq_client
+src.gps.location     ◄── config, core.state, audio.speaker, ai.groq_client
+src.conversation.intents ◄── core.state, audio.speaker, ai.groq_client, ocr.reader, gps.location
+src.conversation.commands ◄── core.state, audio.listener, conversation.intents
+src.core.app         ◄── config, core.state, audio.speaker, audio.listener,
+                          vision.detector, conversation.commands, gps.location
+main.py              ◄── core.app
+```
+
+## API — Groq (backend principal)
+
+| Feature | Modèle | Quota gratuit |
+|---------|--------|---------------|
+| NLP / Darija | `llama-3.1-8b-instant` | 14 400 req/jour |
+| STT Arabe | `whisper-large-v3-turbo` | 7 200 req/jour |
+
+Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 
 ## Thread Synchronisation
 
-Two daemon threads launched from `main.py`:
+| Thread | Fonction | Fichier |
+|--------|----------|---------|
+| Vision | `mode_vision()` | `src/vision/detector.py` |
+| Conversation | `mode_conversation()` | `src/conversation/commands.py` |
 
-| Thread | Function | Description |
-|--------|----------|-------------|
-| Vision | `mode_vision()` | YOLO loop; announces objects in Darija via `parler()` |
-| Conversation | `mode_conversation()` | VAD loop → Groq Whisper STT → `process_command()` |
-
-| Primitive | Type | Purpose |
-|-----------|------|---------|
-| `camera_lock` | `threading.Lock` | Serialises all `camera.capture_array()` calls |
-| `audio_lock` | `threading.Lock` | Serialises all `parler()` calls |
-| `conversation_active` | `threading.Event` | **Pauses vision during audio playback only** — set/cleared inside `parler()`. Vision runs freely during mic listening. |
+| Primitive | Type | Rôle |
+|-----------|------|------|
+| `camera_lock` | `Lock` | Sérialise `camera.capture_array()` |
+| `audio_lock` | `Lock` | Sérialise `parler()` |
+| `conversation_active` | `Event` | **Pause vision pendant audio seulement** — géré dans `speaker.parler()` uniquement |
 
 ## Key Functions
 
-- **`parler(texte)`** in `audio.py` — sets `conversation_active`, edge-tts (ar-MA-JamalNeural) → fallback gTTS → mpg123; protected by `audio_lock`; clears `conversation_active` after playback
-- **`groq_darija(question)`** in `groq_service.py` — `llama-3.1-8b-instant`, 3 retries with exponential backoff
-- **`reconnaitre_voix()`** in `groq_service.py` — PyAudio VAD → WAV → `whisper-large-v3-turbo`; **30s timeout** if no voice detected
-- **`process_command(commande)`** in `intents.py` — command router; returns `False` to stop the conversation loop
-- **`lire_texte()`** in `ocr_reader.py` — camera capture → Pytesseract (`ara+fra`) → `groq_darija()` narration
-- **`get_gps()`** in `gps.py` — reads NMEA from persistent serial connection `state.gps_serial`
-- **`calibrer_micro()`** in `audio.py` — measures ambient noise at startup, sets `VOL_SEUIL = max(150, ambient×3)`
-- **`suprimer_alsa()`** in `audio.py` — context manager that redirects stderr to suppress ALSA/JACK noise
+- **`parler(texte)`** in `src/audio/speaker.py` — sets `conversation_active`, edge-tts (`ar-MA-JamalNeural`) → fallback gTTS → mpg123
+- **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → Whisper; **timeout 30s**
+- **`groq_darija(question)`** in `src/ai/groq_client.py` — LLaMA, 3 retries backoff
+- **`process_command(commande)`** in `src/conversation/intents.py` — retourne `False` pour arrêt
+- **`calibrer_micro()`** in `src/audio/speaker.py` — mesure bruit ambiant → `VOL_SEUIL`
+- **`suprimer_alsa()`** in `src/audio/speaker.py` — contextmanager stderr redirect
 
-## Configuration Constants (config.py)
+## Configuration (config/settings.py)
 
-| Constant | Default | Purpose |
-|----------|---------|---------|
-| `GROQ_API_KEY` | `os.environ["GROQ_API_KEY"]` | Never hardcode |
-| `GPS_PORT` | `/dev/ttyS0` | Serial port for GPS |
-| `CONF_SEUIL` | `0.50` | YOLO confidence threshold (was 0.60 — test 0.45 if missing objects) |
-| `EDGE_VOICE` | `ar-MA-JamalNeural` | Microsoft edge-tts voice |
-| `TIMEOUT_ECOUTE` | `≈468 chunks (30s)` | Mic listening timeout |
-| `MODEL_PATH` | auto | Checks `models/yolov8n.pt` then `yolov8n.pt` at root |
-| `VOL_SEUIL` | auto-calibrated | Set at startup in `state.py` |
+| Constante | Défaut | Rôle |
+|-----------|--------|------|
+| `GROQ_API_KEY` | `os.environ.get(...)` | Vide si absent (erreur levée dans app.init()) |
+| `CONF_SEUIL` | `0.50` | Seuil confiance YOLO (tester 0.45 si détection insuffisante) |
+| `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
+| `TIMEOUT_ECOUTE` | `≈468 chunks (30s)` | Timeout micro |
+| `MODEL_PATH` | `models/yolov8n.pt` | Chemin modèle YOLO |
+| `GPS_PORT` | `/dev/ttyS0` | Port série GPS |
 
-## Object Dictionary
+## Imports matériels — lazy loading
 
-`translations.py` maps YOLO COCO class names → Darija strings. Add entries here for new object classes.
+`Picamera2`, `YOLO`, `Groq` sont importés à l'intérieur de `app.init()`, pas au niveau module.
+Cela permet d'importer `config`, `src.vision.translations`, `src.conversation.intents` etc.
+sur Windows pour les tests, sans lever d'erreur d'import matériel.
 
-## Audio / Bluetooth Setup (Raspberry Pi)
+## Audio / Bluetooth (Raspberry Pi)
 
-The Pi uses **PipeWire** as its audio system (Raspberry Pi OS Trixie).
+PipeWire (Raspberry Pi OS Trixie). Écouteurs : **oraimo SpaceBuds Air** MAC `28:52:E0:23:61:6F`
 
-**Bluetooth headphones (oraimo SpaceBuds Air — MAC `28:52:E0:23:61:6F`):**
 ```bash
 bluetoothctl connect 28:52:E0:23:61:6F
 pactl set-default-sink $(pactl list sinks short | grep bluez | awk '{print $2}')
 ```
 
-**If Bluetooth sink doesn't appear** after reboot:
+HUAWEI FreeBuds SE 3 (`70:40:FF:6E:21:7E`) : échec PipeWire — ne pas utiliser.
+
+## Tests
+
 ```bash
-systemctl --user start wireplumber pipewire pipewire-pulse
-bluetoothctl connect 28:52:E0:23:61:6F
+# Depuis la racine du projet, fonctionne sur Windows sans Pi
+python3 tests/test_config.py
+python3 tests/test_translations.py
+python3 tests/test_intents.py
+# ou
+pytest tests/ -v
 ```
 
-Note: HUAWEI FreeBuds SE 3 (MAC `70:40:FF:6E:21:7E`) failed to provide an audio sink via PipeWire. oraimo SpaceBuds Air worked immediately.
+## Fixes Appliqués (2026-06-13)
 
-## Free/Cheap API Alternatives
-
-| Need | Best Free | Cheap paid |
-|------|-----------|------------|
-| NLP (Darija) | **Groq** `llama-3.1-8b-instant` — 14 400/day | Gemini 1.5 Flash $0.075/1M tokens |
-| STT (Arabic) | **Groq** `whisper-large-v3-turbo` — 7 200/day | OpenAI Whisper $0.006/min |
-| TTS (Arabic) | **edge-tts** `ar-MA-JamalNeural` free + fallback gTTS | ElevenLabs $5/mo (very natural) |
-| Object detection | **YOLOv8n** local — free forever | — |
-| OCR | **Tesseract** local — free forever | — |
-
-**Gemini status:** New `AQ.Ab8...` key format returns `limit: 0` on all models. Avoid.
-
-## Fixes Applied (2026-06-13)
-
-| Fix | Description | File |
-|-----|-------------|------|
-| `conversation_active` | Moved into `parler()` only — vision free during mic listening | `audio.py` |
-| `edge-tts` | `ar-MA-JamalNeural` with automatic `gTTS` fallback | `audio.py` |
-| `CONF_SEUIL` | `0.60` → `0.50` (test `0.45` if still missing objects) | `config.py` |
-| Mic timeout | 30s without voice → automatic return, no infinite block | `groq_service.py` |
-| Refactoring | `assistant_ia.py` split into 11 modules | all files |
+| Fix | Description | Fichier |
+|-----|-------------|---------|
+| `conversation_active` | Uniquement dans `parler()` — vision libre pendant écoute | `src/audio/speaker.py` |
+| edge-tts | `ar-MA-JamalNeural` + fallback gTTS automatique | `src/audio/speaker.py` |
+| `CONF_SEUIL` | `0.60` → `0.50` | `config/settings.py` |
+| Timeout micro | 30s sans voix → retour automatique | `src/audio/listener.py` |
+| Lazy imports | Picamera2/YOLO/Groq importés dans `init()` seulement | `src/core/app.py` |
+| Refactoring src/ | 10 modules plats → structure `src/` + `config/` | tous |
+| models/ | `yolov8n.pt` déplacé via `git mv` | `models/yolov8n.pt` |
 
 ## Known Non-Issues
 
-ALSA/JACK spam at startup is suppressed by `suprimer_alsa()` in `audio.py` around PyAudio init.
+- ALSA/JACK spam supprimé par `suprimer_alsa()` dans `src/audio/speaker.py`
+- Traceback `Picamera2.close()` sur Ctrl+C : bug connu PiCamera2, pas fonctionnel
 
-The `Picamera2.close()` traceback on `KeyboardInterrupt` is a known PiCamera2 bug — does not affect functionality.
+## Free/Cheap API Alternatives
 
-## Import Chain (no circular dependencies)
-
-```
-config → (stdlib only)
-translations → (nothing)
-state → threading
-audio → config, state
-groq_service → config, state, audio
-vision → config, translations, state, audio
-ocr_reader → state, audio, groq_service
-gps → config, state, audio, groq_service
-intents → state, audio, groq_service, ocr_reader, gps
-conversation → state, groq_service, intents
-main → config, state, audio, vision, conversation, gps
-```
+| Besoin | Gratuit | Payant |
+|--------|---------|--------|
+| NLP Darija | **Groq** `llama-3.1-8b-instant` | Gemini 1.5 Flash $0.075/1M |
+| STT Arabe | **Groq** `whisper-large-v3-turbo` | OpenAI Whisper $0.006/min |
+| TTS Arabe | **edge-tts** + fallback gTTS | ElevenLabs $5/mo |
+| Détection | **YOLOv8n** local | — |
+| OCR | **Tesseract** local | — |
