@@ -1,3 +1,7 @@
+# DÉPRÉCIÉ — Ce fichier est remplacé par main.py
+# Le projet a été réorganisé en modules séparés.
+# Utiliser : python3 main.py
+#
 # ╔══════════════════════════════════════════════╗
 # ║   Assistant IA — Malvoyants Maroc            ║
 # ║   YOLO + Groq (Whisper + LLaMA) + GPS + OCR ║

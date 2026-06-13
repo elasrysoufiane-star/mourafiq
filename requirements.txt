@@ -1,0 +1,19 @@
+# Assistant IA Malvoyants — Maroc
+# pip install -r requirements.txt
+#
+# Prérequis système (apt) :
+#   sudo apt install tesseract-ocr tesseract-ocr-ara tesseract-ocr-fra mpg123
+#
+# picamera2 est installé via apt sur Raspberry Pi OS, pas via pip :
+#   sudo apt install python3-picamera2
+
+ultralytics
+pytesseract
+pyaudio
+pyserial
+pynmea2
+gtts
+edge-tts
+groq
+pillow
+numpy

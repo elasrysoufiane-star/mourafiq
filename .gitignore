@@ -5,6 +5,12 @@ env/
 *.onnx
 *.zip
 vosk-model-*/
-models/
 *.wav
 *.mp4
+
+# Répertoires générés au runtime
+temp/
+logs/
+
+# Variables d'environnement — ne jamais committer
+.env
