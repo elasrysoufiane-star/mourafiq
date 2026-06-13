@@ -4,7 +4,7 @@
 # ║   Raspberry Pi 4 — Master IT TAM UM5 2026    ║
 # ╚══════════════════════════════════════════════╝
 
-import os, contextlib, subprocess
+import os, contextlib, subprocess, asyncio
 from ultralytics import YOLO
 from picamera2 import Picamera2
 import pytesseract
@@ -16,6 +16,14 @@ from groq import Groq
 from PIL import Image
 import numpy as np
 
+# edge-tts importé dynamiquement — fallback gTTS si absent
+try:
+    import edge_tts
+    EDGE_TTS_OK = True
+except ImportError:
+    EDGE_TTS_OK = False
+    print('AVERTISSEMENT: edge-tts absent, fallback gTTS actif')
+
 # ══════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════
@@ -24,8 +32,17 @@ GPS_PORT     = '/dev/ttyS0'
 GPS_BAUD     = 9600
 AUDIO_MP3    = '/tmp/audio.mp3'
 AUDIO_WAV    = '/tmp/audio.wav'
-CONF_SEUIL   = 0.60
+
+# Fix 3 — seuil abaissé à 0.50 pour mieux détecter les objets
+# Tester 0.45 si des objets réels sont encore trop souvent ratés
+CONF_SEUIL = 0.50
+
 VOL_SEUIL    = 200  # recalibré au démarrage
+EDGE_VOICE   = 'ar-MA-JamalNeural'  # voix marocaine — fallback: ar-EG-SalmaNeural
+
+# Timeout écoute micro : si personne ne parle pendant N secondes → retour automatique
+# 16000 samples/s ÷ 1024 samples/chunk ≈ 15.6 chunks/s × 30s ≈ 468 chunks
+TIMEOUT_ECOUTE = int(30 * 16000 / 1024)
 
 # ══════════════════════════════════════════════
 # DICTIONNAIRE DARIJA
@@ -158,6 +175,8 @@ print('=' * 50)
 
 camera_lock         = threading.Lock()
 audio_lock          = threading.Lock()
+# Fix 1 — conversation_active est géré uniquement dans parler()
+# Il pause la vision pendant la sortie audio, PAS pendant l'écoute micro
 conversation_active = threading.Event()
 
 # ══════════════════════════════════════════════
@@ -165,14 +184,36 @@ conversation_active = threading.Event()
 # ══════════════════════════════════════════════
 
 def parler(texte):
+    # Fix 1 — on bloque la vision seulement pendant la sortie audio
+    conversation_active.set()
     with audio_lock:
         try:
             print(f'Pi dit: {texte}')
-            gTTS(text=texte, lang='ar').save(AUDIO_MP3)
-            # mpg123 bloque jusqu'à la fin réelle — pas de coupe Bluetooth
+            tts_ok = False
+
+            # Fix 2 — edge-tts en priorité (voix marocaine plus naturelle)
+            if EDGE_TTS_OK:
+                try:
+                    # asyncio.run() fonctionne depuis un thread en Python 3.7+
+                    asyncio.run(
+                        edge_tts.Communicate(texte, voice=EDGE_VOICE).save(AUDIO_MP3)
+                    )
+                    tts_ok = True
+                except Exception as e:
+                    print(f'edge-tts échoué ({e}), fallback gTTS...')
+
+            # Fallback gTTS si edge-tts absent ou en erreur
+            if not tts_ok:
+                gTTS(text=texte, lang='ar').save(AUDIO_MP3)
+
+            # mpg123 bloque jusqu'à la fin réelle — fiable sur Bluetooth
             subprocess.run(['mpg123', '-q', AUDIO_MP3], check=False)
+
         except Exception as e:
             print(f'Erreur audio: {e}')
+    # Rend la main à la vision dès que l'audio est terminé
+    conversation_active.clear()
+
 
 def groq_darija(question):
     for tentative in range(3):
@@ -206,15 +247,17 @@ def groq_darija(question):
                 print(f'Erreur Groq: {e}')
                 return 'عفوا ماقدرتش نفهم'
 
+
 def reconnaitre_voix():
     print('En attente de voix...')
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
                         rate=16000, input=True, frames_per_buffer=1024)
-    frames  = []
-    silence = 0
-    parole  = False
+    frames   = []
+    silence  = 0
+    parole   = False
+    timeout  = 0  # compteur de chunks sans voix détectée
 
     while True:
         data   = stream.read(1024, exception_on_overflow=False)
@@ -222,13 +265,21 @@ def reconnaitre_voix():
         volume = np.abs(chunk).mean()
 
         if volume > VOL_SEUIL:
-            parole  = True
-            silence = 0
+            parole   = True
+            silence  = 0
+            timeout  = 0
             frames.append(data)
         elif parole:
+            # Parole commencée — on attend la fin de la phrase
             silence += 1
             frames.append(data)
             if silence > 16:
+                break
+        else:
+            # Pas encore de parole — timeout pour éviter blocage infini
+            timeout += 1
+            if timeout >= TIMEOUT_ECOUTE:
+                print('Timeout écoute (30s sans voix)')
                 break
 
     stream.stop_stream()
@@ -273,6 +324,7 @@ def mode_vision():
     print('Mode Vision démarré...')
     while True:
         try:
+            # Pause uniquement pendant la sortie audio (conversation_active géré par parler())
             if conversation_active.is_set():
                 time.sleep(0.5)
                 continue
@@ -351,9 +403,10 @@ def mode_conversation():
     print('Mode Conversation démarré...')
     while True:
         try:
-            conversation_active.set()
+            # Fix 1 — plus de conversation_active.set() ici
+            # La vision tourne librement pendant l'écoute micro
+            # conversation_active est activé/désactivé uniquement dans parler()
             commande = reconnaitre_voix()
-            conversation_active.clear()
 
             if not commande:
                 continue
@@ -406,6 +459,7 @@ def mode_conversation():
                 parler(groq_darija(commande))
 
         except Exception as e:
+            # Sécurité — libérer l'event si exception survient pendant parler()
             conversation_active.clear()
             print(f'Erreur conversation: {e}')
             time.sleep(1)
