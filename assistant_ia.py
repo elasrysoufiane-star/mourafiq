@@ -4,10 +4,11 @@
 # ║   Raspberry Pi 4 — Master IT TAM UM5 2026    ║
 # ╚══════════════════════════════════════════════╝
 
+import os
 from ultralytics import YOLO
 from picamera2 import Picamera2
 import pytesseract
-import pyaudio, wave, socket
+import pyaudio, wave
 import threading, time
 import serial, pynmea2
 from gtts import gTTS
@@ -19,7 +20,7 @@ import numpy as np
 # ══════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════
-GEMINI_API_KEY = ""
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 GPS_PORT       = '/dev/ttyS0'
 GPS_BAUD       = 9600
 AUDIO_MP3      = '/tmp/audio.mp3'
@@ -102,26 +103,28 @@ print('Chargement Gemini...')
 genai.configure(api_key=GEMINI_API_KEY)
 gemini = genai.GenerativeModel('gemini-2.0-flash')
 
-# PyAudio
-micro = pyaudio.PyAudio()
-
 print('Tout est prêt !')
 print('=' * 50)
+
+camera_lock         = threading.Lock()
+audio_lock          = threading.Lock()
+conversation_active = threading.Event()
 
 # ══════════════════════════════════════════════
 # FONCTIONS UTILITAIRES
 # ══════════════════════════════════════════════
 
 def parler(texte):
-    try:
-        print(f'Pi dit: {texte}')
-        gTTS(text=texte, lang='ar').save(AUDIO_MP3)
-        pygame.mixer.music.load(AUDIO_MP3)
-        pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():
-            time.sleep(0.1)
-    except Exception as e:
-        print(f'Erreur audio: {e}')
+    with audio_lock:
+        try:
+            print(f'Pi dit: {texte}')
+            gTTS(text=texte, lang='ar').save(AUDIO_MP3)
+            pygame.mixer.music.load(AUDIO_MP3)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+        except Exception as e:
+            print(f'Erreur audio: {e}')
 
 def gemini_darija(question):
     try:
@@ -195,6 +198,7 @@ def reconnaitre_voix():
             audio_file,
             'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق'
         ])
+        genai.delete_file(audio_file.name)
         texte = result.text.strip()
         print(f'Compris: {texte}')
         return texte
@@ -210,7 +214,13 @@ def mode_vision():
     print('Mode Vision démarré...')
     while True:
         try:
-            img     = camera.capture_array()
+            if conversation_active.is_set():
+                time.sleep(0.5)
+                continue
+
+            with camera_lock:
+                img = camera.capture_array()
+
             results = model(img, verbose=False)
             for r in results:
                 for box in r.boxes:
@@ -222,6 +232,8 @@ def mode_vision():
                             parler(traductions[obj])
                             dernier = obj
                             time.sleep(3)
+
+            time.sleep(0.1)
         except Exception as e:
             print(f'Erreur vision: {e}')
             time.sleep(1)
@@ -232,7 +244,8 @@ def mode_vision():
 def lire_texte():
     try:
         parler('انتظر كنقرا')
-        img     = camera.capture_array()
+        with camera_lock:
+            img = camera.capture_array()
         img_pil = Image.fromarray(img)
         texte   = pytesseract.image_to_string(
             img_pil, lang='ara+fra'
@@ -287,7 +300,10 @@ def mode_conversation():
     print('Mode Conversation démarré...')
     while True:
         try:
+            conversation_active.set()
             commande = reconnaitre_voix()
+            conversation_active.clear()
+
             if not commande:
                 continue
 
@@ -308,7 +324,8 @@ def mode_conversation():
             elif any(m in commande for m in [
                 'شنو','قدامي','واش','شوف','وصف'
             ]):
-                img = camera.capture_array()
+                with camera_lock:
+                    img = camera.capture_array()
                 r   = model(img, verbose=False)[0]
                 if r.boxes:
                     objets = []
@@ -372,6 +389,7 @@ def mode_conversation():
                 parler(reponse)
 
         except Exception as e:
+            conversation_active.clear()
             print(f'Erreur conversation: {e}')
             time.sleep(1)
 
@@ -397,4 +415,3 @@ except KeyboardInterrupt:
     print('Arrêt...')
     camera.stop()
     pygame.quit()
-    micro.terminate()
