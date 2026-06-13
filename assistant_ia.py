@@ -108,6 +108,7 @@ camera.start()
 time.sleep(2)
 
 print('Chargement audio...')
+os.environ['SDL_AUDIODRIVER'] = 'pulse'
 pygame.mixer.init()
 
 print('Chargement Gemini...')
