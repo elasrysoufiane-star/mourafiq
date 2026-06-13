@@ -108,6 +108,7 @@ camera.start()
 time.sleep(2)
 
 print('Chargement audio...')
+pygame.mixer.pre_init(44100, -16, 2, 4096)
 pygame.mixer.init()
 
 print('Chargement Groq...')
@@ -168,11 +169,14 @@ def parler(texte):
     with audio_lock:
         try:
             print(f'Pi dit: {texte}')
+            pygame.mixer.music.stop()
             gTTS(text=texte, lang='ar').save(AUDIO_MP3)
             pygame.mixer.music.load(AUDIO_MP3)
             pygame.mixer.music.play()
+            time.sleep(0.3)  # laisse le Bluetooth démarrer
             while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
+                time.sleep(0.05)
+            time.sleep(0.4)  # vide le buffer Bluetooth avant de continuer
         except Exception as e:
             print(f'Erreur audio: {e}')
 
