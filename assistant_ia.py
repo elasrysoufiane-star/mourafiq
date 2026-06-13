@@ -20,7 +20,9 @@ import numpy as np
 # ══════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+#GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_API_KEY = "AQ.Ab8RN6LjmR_lvoQoSc_yWTexleFenmI-OUWMM74l5PLM7GFkzQ"
+
 GPS_PORT       = '/dev/ttyS0'
 GPS_BAUD       = 9600
 AUDIO_MP3      = '/tmp/audio.mp3'
