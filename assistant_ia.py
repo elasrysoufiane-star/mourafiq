@@ -191,7 +191,7 @@ def gemini_darija(question):
     for tentative in range(3):
         try:
             response = gemini.models.generate_content(
-                model='gemini-1.5-flash', contents=prompt
+                model='gemini-2.0-flash', contents=prompt
             )
             reponse = response.text.strip()
             print(f'Gemini darija: {reponse}')
@@ -248,7 +248,7 @@ def reconnaitre_voix():
         try:
             audio_file = gemini.files.upload(file=AUDIO_WAV)
             result = gemini.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.0-flash',
                 contents=[audio_file, 'اكتب فقط ما قاله الشخص بالعربية بدون أي تعليق']
             )
             gemini.files.delete(name=audio_file.name)
