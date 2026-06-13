@@ -109,11 +109,11 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 ## Key Functions
 
 - **`parler(texte)`** in `src/audio/speaker.py` — sets `conversation_active`, edge-tts (`ar-MA-JamalNeural`) → fallback gTTS → mpg123
-- **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → Whisper; **timeout 30s**
+- **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → Whisper; **timeout 8s**
 - **`groq_darija(question)`** in `src/ai/groq_client.py` — LLaMA, 3 retries backoff
 - **`process_command(commande)`** in `src/conversation/intents.py` — retourne `False` pour arrêt
-- **`calibrer_micro()`** in `src/audio/speaker.py` — mesure bruit ambiant → `VOL_SEUIL`
-- **`suprimer_alsa()`** in `src/audio/speaker.py` — contextmanager stderr redirect
+- **`calibrer_micro()`** in `src/audio/listener.py` — mesure bruit ambiant → `VOL_SEUIL`
+- **`suprimer_alsa()`** in `src/audio/listener.py` — contextmanager stderr redirect
 
 ## Configuration (config/settings.py)
 

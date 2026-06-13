@@ -45,10 +45,10 @@ def test_timeout_ecoute_positive():
     assert TIMEOUT_ECOUTE > 0, "TIMEOUT_ECOUTE doit être > 0"
 
 
-def test_timeout_ecoute_approx_30s():
-    """Le timeout doit correspondre environ à 30 secondes."""
+def test_timeout_ecoute_approx_8s():
+    """Le timeout doit correspondre environ à 8 secondes."""
     secondes_approx = TIMEOUT_ECOUTE * 1024 / 16000
-    assert 25 <= secondes_approx <= 35, f"Timeout ≈ {secondes_approx:.1f}s (attendu ~30s)"
+    assert 6 <= secondes_approx <= 10, f"Timeout ≈ {secondes_approx:.1f}s (attendu ~8s)"
 
 
 def test_gps_baud_standard():
@@ -84,7 +84,7 @@ if __name__ == '__main__':
         test_edge_voice_arabic,
         test_edge_voice_moroccan,
         test_timeout_ecoute_positive,
-        test_timeout_ecoute_approx_30s,
+        test_timeout_ecoute_approx_8s,
         test_gps_baud_standard,
         test_base_dir_exists,
         test_paths_in_project,

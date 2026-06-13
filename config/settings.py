@@ -33,6 +33,6 @@ CONF_SEUIL = 0.50
 EDGE_VOICE = 'ar-MA-JamalNeural'
 
 # ── Reconnaissance vocale ─────────────────────────────────────────────────────
-# Timeout d'écoute micro : 30s sans voix → retour automatique
-# 16000 samples/s ÷ 1024 samples/chunk × 30s ≈ 468 chunks
-TIMEOUT_ECOUTE = int(30 * 16000 / 1024)
+# Timeout d'écoute micro : 8s sans voix → retour automatique
+# 16000 samples/s ÷ 1024 samples/chunk × 8s ≈ 125 chunks
+TIMEOUT_ECOUTE = int(8 * 16000 / 1024)

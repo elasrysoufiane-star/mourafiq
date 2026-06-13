@@ -1,7 +1,14 @@
 """
-Écoute micro avec VAD (Voice Activity Detection) et transcription Groq Whisper.
-Timeout automatique après 30s sans voix pour éviter tout blocage infini.
+Écoute micro — VAD, calibration et transcription Groq Whisper.
+
+Contient aussi les utilitaires liés au micro :
+  - suprimer_alsa() : supprime le spam ALSA/JACK au démarrage
+  - calibrer_micro() : mesure le bruit ambiant et calcule VOL_SEUIL
+
+Timeout automatique après 8s sans voix pour éviter tout blocage infini.
 """
+import os
+import contextlib
 import wave
 import time
 
@@ -15,13 +22,59 @@ except ImportError:
 
 from config.settings import AUDIO_WAV, TIMEOUT_ECOUTE
 from src.core import state
-from src.audio.speaker import suprimer_alsa
 
+
+# ── Utilitaires micro ─────────────────────────────────────────────────────────
+
+@contextlib.contextmanager
+def suprimer_alsa():
+    """Redirige stderr vers /dev/null pour supprimer le spam ALSA/JACK."""
+    devnull    = os.open(os.devnull, os.O_WRONLY)
+    old_stderr = os.dup(2)
+    os.dup2(devnull, 2)
+    os.close(devnull)
+    try:
+        yield
+    finally:
+        os.dup2(old_stderr, 2)
+        os.close(old_stderr)
+
+
+def calibrer_micro() -> int:
+    """
+    Écoute le bruit ambiant pendant 2 secondes et calcule le seuil de détection vocale.
+    Retourne le seuil calculé (minimum 150).
+    """
+    if not _PYAUDIO_OK:
+        print('PyAudio absent — seuil par défaut: 200')
+        return 200
+
+    with suprimer_alsa():
+        p      = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16, channels=1,
+                        rate=16000, input=True, frames_per_buffer=1024)
+    volumes = []
+    for _ in range(30):
+        data = stream.read(1024, exception_on_overflow=False)
+        vol  = np.abs(np.frombuffer(data, dtype=np.int16)).mean()
+        volumes.append(vol)
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
+    bruit = float(np.mean(volumes))
+    seuil = max(150, int(bruit * 3))
+    print(f'Bruit ambiant: {bruit:.0f} → Seuil voix: {seuil}')
+    return seuil
+
+
+# ── Reconnaissance vocale ─────────────────────────────────────────────────────
 
 def reconnaitre_voix() -> str:
     """
     Écoute le micro jusqu'à détection d'une phrase, puis transcrit avec Whisper.
     Retourne la transcription (str) ou '' si timeout / erreur.
+    Timeout : 8s sans voix → retour automatique.
     """
     if not _PYAUDIO_OK:
         print('PyAudio absent — écoute désactivée')
@@ -60,7 +113,7 @@ def reconnaitre_voix() -> str:
             # Pas encore de parole — incrémenter le timeout
             timeout += 1
             if timeout >= TIMEOUT_ECOUTE:
-                print('Timeout écoute (30s sans voix)')
+                print('Timeout écoute (8s sans voix)')
                 break
 
     stream.stop_stream()

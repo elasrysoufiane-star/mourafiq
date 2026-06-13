@@ -9,7 +9,8 @@ import subprocess
 
 from config.settings import GROQ_API_KEY, MODEL_PATH, BASE_DIR
 from src.core import state
-from src.audio.speaker import parler, suprimer_alsa, calibrer_micro
+from src.audio.speaker import parler
+from src.audio.listener import suprimer_alsa, calibrer_micro
 from src.vision.detector import mode_vision
 from src.conversation.commands import mode_conversation
 from src.gps.location import init_gps
