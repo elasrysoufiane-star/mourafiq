@@ -20,7 +20,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 # ── Mode et providers ─────────────────────────────────────────────────────────
 # DEMO_MODE : 'free' (défaut) ou 'demo' (documentation uniquement, pas de logique)
 DEMO_MODE    = os.environ.get('DEMO_MODE',    'free')
-AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai | ollama
+AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'ollama')  # groq | openai | ollama
 STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
 TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
 

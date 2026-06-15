@@ -15,7 +15,7 @@ from config.settings import (
     ELEVENLABS_API_KEY, OPENAI_API_KEY,
 )
 
-_VALID_AI  = {'groq', 'openai'}
+_VALID_AI  = {'groq', 'openai', 'ollama'}
 _VALID_STT = {'groq', 'openai'}
 _VALID_TTS = {'edge', 'gtts', 'elevenlabs'}
 
@@ -47,7 +47,7 @@ def test_tts_provider_valid():
 def test_default_free_mode():
     """Sans clé payante, les providers par défaut doivent être les gratuits."""
     if not ELEVENLABS_API_KEY and not OPENAI_API_KEY:
-        assert AI_PROVIDER  == 'groq', "AI_PROVIDER par défaut doit être 'groq'"
+        assert AI_PROVIDER  in {'groq', 'ollama'}, "AI_PROVIDER par défaut doit être 'groq' ou 'ollama'"
         assert STT_PROVIDER == 'groq', "STT_PROVIDER par défaut doit être 'groq'"
         assert TTS_PROVIDER == 'edge', "TTS_PROVIDER par défaut doit être 'edge'"
 
