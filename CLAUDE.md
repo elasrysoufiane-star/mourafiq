@@ -137,6 +137,8 @@ Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fa
 - **`describe_scene(image, question)`** in `src/providers/vision_ai.py` — routage VLM (claude) ou fallback YOLO local + cooldown
 - **`claude_describe_scene(image, q)`** in `src/ai/claude_client.py` — Claude multimodal, image downscalée, usage loggé
 - **`process_command(commande)`** in `src/conversation/intents.py` — retourne `False` pour arrêt
+- **`mode_conversation()`** in `src/conversation/commands.py` — boucle écoute + mot de réveil « مرافق » + fenêtre de suivi (`WAKE_FOLLOWUP_WINDOW`)
+- **`contient_wake(commande)` / `retirer_wake(commande)`** in `src/conversation/intents.py` — détection/retrait du mot de réveil
 - **`calibrer_micro()`** in `src/audio/listener.py` — mesure bruit ambiant → `VOL_SEUIL`
 - **`suprimer_alsa()`** in `src/audio/listener.py` — contextmanager stderr redirect
 
@@ -182,6 +184,8 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse (parlée → courte) |
 | `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens) |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
+| `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
+| `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
 
 ## Imports matériels — lazy loading
 

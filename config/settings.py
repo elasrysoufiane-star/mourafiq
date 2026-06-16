@@ -80,3 +80,11 @@ EDGE_VOICE = 'ar-MA-JamalNeural'
 # Timeout d'écoute micro : 8s sans voix → retour automatique
 # 16000 samples/s ÷ 1024 samples/chunk × 8s ≈ 125 chunks
 TIMEOUT_ECOUTE = int(8 * 16000 / 1024)
+
+# ── Mot de réveil (wake word) ─────────────────────────────────────────────────
+# L'appareil n'exécute une commande qu'après avoir entendu son nom (« مرافق »),
+# puis reste à l'écoute WAKE_FOLLOWUP_WINDOW secondes (fenêtre de suivi) — tu peux
+# enchaîner plusieurs questions sans répéter le mot. Évite les fausses commandes
+# (écho, bruit, hallucinations Whisper). WAKE_WORD_ENABLED=0 → écoute continue.
+WAKE_WORD_ENABLED    = os.environ.get('WAKE_WORD_ENABLED', '1') not in ('0', 'false', 'False', '')
+WAKE_FOLLOWUP_WINDOW = float(os.environ.get('WAKE_FOLLOWUP_WINDOW', '15'))

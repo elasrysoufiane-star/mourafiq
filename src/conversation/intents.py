@@ -21,6 +21,21 @@ KEYWORDS_HELP     = ['عاون', 'مساعدة', 'شنو تقدر']
 # salut courant 'السلام عليكم' / 'سلام' → évite l'arrêt accidentel quand on salue.
 KEYWORDS_STOP     = ['وقف', 'بارك', 'إيقاف', 'سلامة']
 KEYWORDS_NAVIGATE = ['ودي', 'روح', 'مشي']
+# Mot de réveil + variantes probables de transcription Whisper (« مرافق »).
+KEYWORDS_WAKE     = ['مرافق', 'مرفق', 'مورافيق', 'مرافيق', 'مورافق']
+
+
+def contient_wake(commande: str) -> bool:
+    """True si la commande contient le mot de réveil (ou une variante)."""
+    return any(w in commande for w in KEYWORDS_WAKE)
+
+
+def retirer_wake(commande: str) -> str:
+    """Retire le mot de réveil de la commande, retourne le reste nettoyé."""
+    out = commande
+    for w in KEYWORDS_WAKE:
+        out = out.replace(w, ' ')
+    return out.strip(' ،.؟!')
 
 
 def process_command(commande: str) -> bool:
