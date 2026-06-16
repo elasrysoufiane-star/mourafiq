@@ -24,6 +24,10 @@ AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai | claude
 STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
 TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
 
+# Modèle STT Groq. Défaut = turbo (rapide, gratuit). Pour la précision max :
+# STT_MODEL=whisper-large-v3 (un peu plus lent, meilleure transcription darija).
+STT_MODEL = os.environ.get('STT_MODEL', 'whisper-large-v3-turbo')
+
 # Provider de compréhension de scène (VLM, appelé UNIQUEMENT à la demande).
 # 'local' = YOLO + Groq (gratuit, défaut). 'claude' = Claude multimodal (payant).
 # Fallback automatique vers 'local' si ANTHROPIC_API_KEY absente.

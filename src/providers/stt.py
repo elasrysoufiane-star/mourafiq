@@ -10,7 +10,7 @@ Le fichier WAV doit déjà exister (écrit par reconnaitre_voix() dans listener.
 """
 import time
 
-from config.settings import STT_PROVIDER, OPENAI_API_KEY, AUDIO_WAV
+from config.settings import STT_PROVIDER, STT_MODEL, OPENAI_API_KEY, AUDIO_WAV
 
 # Biais de reconnaissance : on donne à Whisper le vocabulaire darija attendu.
 # Whisper se sert du `prompt` comme contexte → améliore nettement la
@@ -40,7 +40,7 @@ def _groq_transcribe() -> str:
         try:
             with open(AUDIO_WAV, 'rb') as f:
                 result = state.groq_client.audio.transcriptions.create(
-                    model='whisper-large-v3-turbo',
+                    model=STT_MODEL,
                     file=f,
                     language='ar',
                     prompt=_DARIJA_PROMPT,
