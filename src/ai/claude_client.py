@@ -29,9 +29,8 @@ from config.settings import (
     CLAUDE_MAX_TOKENS, CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
 )
 
-# Prompt système fixe — darija marocaine, phrase unique, utile à un malvoyant.
-# Les exemples guident le ton et la concision (distances, directions, sécurité).
-_SYSTEM_PROMPT = (
+# Prompt VISION — description de scène pour un malvoyant (sécurité, concision).
+_VISION_SYSTEM_PROMPT = (
     'أنت مساعد بصري ذكي للمكفوفين في المغرب. '
     'تتكلم الدارجة المغربية فقط. '
     'وصف المشهد لي قدام المستخدم بإيجاز مفيد للسلامة: '
@@ -39,6 +38,17 @@ _SYSTEM_PROMPT = (
     'ردك قصير جدا — جملة وحدة ولا جوج بحال الإنسان لي كيهضر بسرعة. '
     'أمثلة: كاين طبلة قدامك على بعد متر، وكرسي على اليمين / '
     'الطريق سالكة، سير نيشان / حذاك باب على اليسار، حل بشوية'
+)
+
+# Prompt CONVERSATION — questions libres en darija (chaleureux, concis,
+# tolérant aux transcriptions imparfaites : demande de répéter au lieu d'inventer).
+_CHAT_SYSTEM_PROMPT = (
+    'أنت "مرافق"، مساعد ذكي للمكفوفين في المغرب. '
+    'كتهضر غير بالدارجة المغربية، بأسلوب دافئ ومطمئن. '
+    'جاوب بإيجاز: جملة ولا جوج، بحال واحد كيهضر مع صاحبو. '
+    'إلا ما فهمتيش السؤال مزيان، طلب منو يعاودو بلطف، وما تختارعش الجواب. '
+    'إلا بغا يعرف شنو قدامو قولو يقول "شنو قدامي"، '
+    'وإلا بغا يقرا شي حاجة قولو يقول "قرا ليا".'
 )
 
 _client = None
@@ -80,11 +90,11 @@ def _extract_text(resp) -> str:
     return next((b.text for b in resp.content if b.type == 'text'), '').strip()
 
 
-def _system_block():
+def _system_block(prompt: str):
     """Bloc système avec marqueur de cache (sans effet si prompt trop court)."""
     return [{
         'type': 'text',
-        'text': _SYSTEM_PROMPT,
+        'text': prompt,
         'cache_control': {'type': 'ephemeral'},
     }]
 
@@ -101,7 +111,7 @@ def claude_darija(question: str) -> str:
             resp = _get_client().messages.create(
                 model=CLAUDE_TEXT_MODEL,
                 max_tokens=CLAUDE_MAX_TOKENS,
-                system=_system_block(),
+                system=_system_block(_CHAT_SYSTEM_PROMPT),
                 messages=[{'role': 'user', 'content': question}],
             )
             _log_usage(resp, 'texte')
@@ -127,7 +137,7 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟') -> str:
             resp = _get_client().messages.create(
                 model=CLAUDE_VISION_MODEL,
                 max_tokens=CLAUDE_MAX_TOKENS,
-                system=_system_block(),
+                system=_system_block(_VISION_SYSTEM_PROMPT),
                 messages=[{'role': 'user', 'content': [
                     {'type': 'image', 'source': {
                         'type': 'base64',
