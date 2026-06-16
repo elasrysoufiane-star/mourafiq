@@ -12,16 +12,10 @@ import time
 
 from config.settings import STT_PROVIDER, STT_MODEL, OPENAI_API_KEY, AUDIO_WAV
 
-# Biais de reconnaissance : on donne à Whisper le vocabulaire darija attendu.
-# Whisper se sert du `prompt` comme contexte → améliore nettement la
-# reconnaissance des commandes courtes (mic Bluetooth HFP en 8 kHz = qualité
-# téléphone, donc ce biais est crucial pour rattraper les mots clés).
-_DARIJA_PROMPT = (
-    'محادثة بالدارجة المغربية مع مساعد للمكفوفين. '
-    'كلمات متوقعة: شنو قدامي، واش كاين، شوف، وصف، قرا ليا، '
-    'وين أنا، فين، موقع، ودي للصيدلية، السبيطار، الجامع، المحطة، '
-    'عاون، مساعدة، بسلامة، وقف.'
-)
+# Biais de langue uniquement — une phrase courte et neutre en darija.
+# NE PAS mettre de liste de mots-clés ici : sur audio faible, Whisper recrache
+# le contenu du prompt (hallucination), ce qui fabrique de fausses commandes.
+_DARIJA_PROMPT = 'تسجيل صوتي بالدارجة المغربية.'
 
 
 def transcribe() -> str:
