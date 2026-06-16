@@ -12,6 +12,17 @@ import time
 
 from config.settings import STT_PROVIDER, OPENAI_API_KEY, AUDIO_WAV
 
+# Biais de reconnaissance : on donne à Whisper le vocabulaire darija attendu.
+# Whisper se sert du `prompt` comme contexte → améliore nettement la
+# reconnaissance des commandes courtes (mic Bluetooth HFP en 8 kHz = qualité
+# téléphone, donc ce biais est crucial pour rattraper les mots clés).
+_DARIJA_PROMPT = (
+    'محادثة بالدارجة المغربية مع مساعد للمكفوفين. '
+    'كلمات متوقعة: شنو قدامي، واش كاين، شوف، وصف، قرا ليا، '
+    'وين أنا، فين، موقع، ودي للصيدلية، السبيطار، الجامع، المحطة، '
+    'عاون، مساعدة، بسلامة، وقف.'
+)
+
 
 def transcribe() -> str:
     """Transcrit AUDIO_WAV via le provider STT configuré. Retourne '' si erreur."""
@@ -31,7 +42,9 @@ def _groq_transcribe() -> str:
                 result = state.groq_client.audio.transcriptions.create(
                     model='whisper-large-v3-turbo',
                     file=f,
-                    language='ar'
+                    language='ar',
+                    prompt=_DARIJA_PROMPT,
+                    temperature=0.0,
                 )
             texte = result.text.strip()
             print(f'Compris: {texte}')
