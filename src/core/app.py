@@ -91,7 +91,8 @@ def main():
     """Point d'entrée principal — lance les threads et attend Ctrl+C."""
     init()
 
-    parler('مرحبا أنا مساعدك الذكي ديال المكفوفين كيفاش نعاونك')
+    parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
+           'باش نوصف ليك لي قدامك، "قرا ليا" للقراءة، ولا "وين أنا" للموقع. أنا معاك.')
 
     t1 = threading.Thread(target=mode_vision,       name='Vision',       daemon=True)
     t2 = threading.Thread(target=mode_conversation, name='Conversation',  daemon=True)
