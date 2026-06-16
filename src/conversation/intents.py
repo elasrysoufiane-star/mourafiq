@@ -7,6 +7,7 @@ importables et testables sans dépendances matérielles.
 from src.core import state
 from src.audio.speaker import parler
 from src.providers.ai import get_ai_response
+from src.providers.vision_ai import describe_scene
 from src.ocr.reader import lire_texte
 from src.gps.location import get_gps, naviguer
 
@@ -33,20 +34,12 @@ def process_command(commande: str) -> bool:
         else:
             parler('ماقدرتش نلقى موقعك دابا')
 
-    # Description de la scène (YOLO sur demande)
+    # Description de la scène à la demande — VLM (Claude) ou fallback YOLO local.
+    # La question vocale est transmise telle quelle au VLM (ex. « واش كاين شي حد؟ »).
     elif any(m in commande for m in KEYWORDS_VISION):
         with state.camera_lock:
             img = state.camera.capture_array()
-        r = state.model(img, verbose=False)[0]
-        objets = [
-            r.names[int(box.cls)]
-            for box in r.boxes[:3]
-            if float(box.conf) > 0.5
-        ]
-        if objets:
-            parler(get_ai_response(f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'))
-        else:
-            parler('الطريق واضحة ماكاين والو')
+        parler(describe_scene(img, commande))
 
     # Lecture OCR
     elif any(m in commande for m in KEYWORDS_OCR):

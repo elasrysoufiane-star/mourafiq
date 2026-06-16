@@ -20,15 +20,35 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 # ── Mode et providers ─────────────────────────────────────────────────────────
 # DEMO_MODE : 'free' (défaut) ou 'demo' (documentation uniquement, pas de logique)
 DEMO_MODE    = os.environ.get('DEMO_MODE',    'free')
-AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai
+AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai | claude
 STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
 TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
+
+# Provider de compréhension de scène (VLM, appelé UNIQUEMENT à la demande).
+# 'local' = YOLO + Groq (gratuit, défaut). 'claude' = Claude multimodal (payant).
+# Fallback automatique vers 'local' si ANTHROPIC_API_KEY absente.
+VISION_AI_PROVIDER = os.environ.get('VISION_AI_PROVIDER', 'local')  # local | claude
 
 # ── Clés API optionnelles (payant — laisser vide si non utilisé) ──────────────
 ELEVENLABS_API_KEY  = os.environ.get('ELEVENLABS_API_KEY',  '')
 # Voice ID depuis lab.elevenlabs.io/voice-library — vide = voix par défaut (Adam)
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', '')
 OPENAI_API_KEY      = os.environ.get('OPENAI_API_KEY',      '')
+
+# ── Claude (Anthropic) — cerveau vision+langage à la demande ──────────────────
+# Clé sur console.anthropic.com (format sk-ant-...). Vide = fallback Groq/local.
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+# Modèles. Haiku 4.5 = défaut (multimodal, rapide, le moins cher : $1/$5 par 1M).
+# Pour la qualité max : CLAUDE_VISION_MODEL=claude-opus-4-8 ($5/$25 par 1M).
+CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-haiku-4-5')
+CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
+# Optimisation tokens : réponse parlée donc courte ; image redimensionnée +
+# compressée avant envoi (les tokens image montent avec la résolution).
+CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '150'))
+CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
+CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
+# Anti double-appel : réutilise la dernière description si < N secondes.
+VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 GPS_PORT = '/dev/ttyS0'
