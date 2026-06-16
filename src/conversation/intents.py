@@ -17,7 +17,9 @@ KEYWORDS_GPS      = ['وين', 'فين', 'أين', 'موقع', 'فاين']
 KEYWORDS_VISION   = ['شنو', 'قدامي', 'واش', 'شوف', 'وصف']
 KEYWORDS_OCR      = ['قرا', 'اقرأ', 'قراءة']
 KEYWORDS_HELP     = ['عاون', 'مساعدة', 'شنو تقدر']
-KEYWORDS_STOP     = ['وقف', 'بارك', 'إيقاف', 'سلام']
+# 'سلامة' (avec ة) matche les adieux (بسلامة / مع السلامة) SANS matcher le
+# salut courant 'السلام عليكم' / 'سلام' → évite l'arrêt accidentel quand on salue.
+KEYWORDS_STOP     = ['وقف', 'بارك', 'إيقاف', 'سلامة']
 KEYWORDS_NAVIGATE = ['ودي', 'روح', 'مشي']
 
 
