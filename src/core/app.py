@@ -7,11 +7,11 @@ import time
 import threading
 import subprocess
 
-from config.settings import GROQ_API_KEY, MODEL_PATH, BASE_DIR
+from config.settings import GROQ_API_KEY, MODEL_PATH, BASE_DIR, AUTO_DESCRIBE_INTERVAL
 from src.core import state
 from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
-from src.vision.detector import mode_vision
+from src.vision.detector import mode_vision, mode_auto_scene
 from src.conversation.commands import mode_conversation
 from src.gps.location import init_gps
 
@@ -107,6 +107,12 @@ def main():
         t2 = threading.Thread(target=mode_conversation, name='Conversation', daemon=True)
         t2.start()
         print('Vision + Conversation actifs !')
+    elif AUTO_DESCRIBE_INTERVAL > 0:
+        # Sans micro : pas de commande vocale → description automatique périodique.
+        t3 = threading.Thread(target=mode_auto_scene, name='AutoScene', daemon=True)
+        t3.start()
+        print(f'Vision + description auto ({AUTO_DESCRIBE_INTERVAL:.0f}s) actives '
+              '(pas de micro).')
     else:
         print('Vision seule active (pas de micro — écoute désactivée).')
 

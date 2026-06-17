@@ -53,6 +53,11 @@ CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
+# Description automatique de scène en mode SANS MICRO (pas de commande vocale).
+# Toutes les N secondes : capture → describe_scene() → parle. 0 = désactivé.
+# Pour utiliser Claude ici : VISION_AI_PROVIDER=claude + ANTHROPIC_API_KEY.
+# Attention coût si provider=claude (≈720 appels/h à 5s) — voir CLAUDE.md.
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '5'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 # Surchargeable via .env (cohérent avec le reste de la config).

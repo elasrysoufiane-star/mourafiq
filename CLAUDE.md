@@ -115,7 +115,7 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fallback local/Groq automatique.
 
-**Architecture hybride (économie de tokens) :** YOLO local tourne en continu (gratuit, 0 token). Claude n'est appelé QUE sur intention vocale (`شنو قدامي؟`). Leviers : appel à la demande, image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut. Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
+**Architecture hybride (économie de tokens) :** YOLO local tourne en continu (gratuit, 0 token). Claude n'est appelé que sur intention vocale (`شنو قدامي؟`) — **ou** périodiquement en mode sans micro si `VISION_AI_PROVIDER=claude` (voir `AUTO_DESCRIBE_INTERVAL`, coût continu). Leviers : appel à la demande, image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut. Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
 
 ## Thread Synchronisation
 
@@ -123,10 +123,14 @@ Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fa
 |--------|----------|---------|
 | Vision | `mode_vision()` | `src/vision/detector.py` |
 | Conversation | `mode_conversation()` | `src/conversation/commands.py` |
+| AutoScene (sans micro) | `mode_auto_scene()` | `src/vision/detector.py` |
 
 Le thread **Conversation n'est lancé que si un micro est détecté** (`state.mic_ok`).
 Sans micro → **mode vision seul** : `app.init()` met `mic_ok=False`, saute la calibration,
 et `main()` ne démarre pas l'écoute (évite la boucle « En attente de voix → Timeout 8s »).
+À la place, si `AUTO_DESCRIBE_INTERVAL > 0`, le thread **AutoScene** décrit la scène
+toutes les N secondes (`describe_scene()` → `parler()`) — remplace la commande vocale
+absente. Provider selon `VISION_AI_PROVIDER` (claude payant / local gratuit).
 
 | Primitive | Type | Rôle |
 |-----------|------|------|
@@ -200,6 +204,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens) |
 | `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
+| `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto en mode sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
 
@@ -265,6 +270,7 @@ pytest tests/ -v
 | GPS robustesse | `get_gps()` : accepte GGA toutes constellations (GNGGA/GPGGA…), vérifie `gps_qual` (fix réel), lecture bornée `GPS_READ_TIMEOUT`, trame corrompue ignorée ; `GPS_PORT/BAUD` env-overridable | `src/gps/location.py`, `config/settings.py` |
 | GPS reverse geocoding | `reverse_geocode()` (Nominatim OSM, stdlib `urllib`, cache ~11 m) → « vous êtes Boulevard X، quartier Y، ville ». `position_actuelle()` centralise « وين أنا » (adresse réelle, fallback coords). Fallback propre si pas d'Internet | `src/gps/location.py`, `src/conversation/intents.py` |
 | Mode vision seul | Sans micro : `init()` met `state.mic_ok=False`, saute la calibration, `main()` ne lance pas le thread conversation → plus de boucle « En attente de voix → Timeout 8s » | `src/core/app.py`, `src/core/state.py` |
+| Description auto (sans micro) | Thread `mode_auto_scene()` : sans micro, décrit la scène toutes les `AUTO_DESCRIBE_INTERVAL`s (`describe_scene()`→`parler()`). Claude si `VISION_AI_PROVIDER=claude`, sinon YOLO+Groq gratuit. Respecte `conversation_active` + cooldown | `src/vision/detector.py`, `src/core/app.py`, `config/settings.py` |
 
 **GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
