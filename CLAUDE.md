@@ -47,17 +47,18 @@ mourafiq/
 │   │   ├── detector.py             # mode_vision() — boucle YOLO
 │   │   └── translations.py         # Dict YOLO COCO → phrases darija
 │   ├── ocr/
-│   │   └── reader.py               # lire_texte() — Tesseract ara+fra
+│   │   └── reader.py               # lire_texte() — capture + délègue providers.ocr
 │   ├── gps/
 │   │   └── location.py             # init_gps(), get_gps(), naviguer()
 │   ├── ai/
 │   │   ├── groq_client.py          # groq_darija() — llama-3.1-8b-instant
-│   │   └── claude_client.py        # claude_darija() + claude_describe_scene() — VLM
+│   │   └── claude_client.py        # claude_darija()/describe_scene()/read_text() — VLM
 │   ├── providers/
 │   │   ├── ai.py                   # get_ai_response() — routage groq/claude/openai
 │   │   ├── stt.py                  # transcribe() — routage groq/openai
 │   │   ├── tts.py                  # synthesize() — routage edge/gtts/elevenlabs
-│   │   └── vision_ai.py            # describe_scene() — routage local(YOLO)/claude
+│   │   ├── vision_ai.py            # describe_scene() — routage local(YOLO)/claude
+│   │   └── ocr.py                  # read_text() — routage local(Tesseract)/claude
 │   └── conversation/
 │       ├── intents.py              # KEYWORDS_* + process_command()
 │       └── commands.py             # mode_conversation() — thread écoute
@@ -67,7 +68,7 @@ mourafiq/
 │   ├── test_config.py
 │   ├── test_translations.py
 │   ├── test_intents.py             # inclut mot de réveil (contient_wake/retirer_wake)
-│   ├── test_providers.py           # routage AI/STT/TTS/vision + clés
+│   ├── test_providers.py           # routage AI/STT/TTS/vision/ocr + clés
 │   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
 └── logs/                           # Logs runtime (auto-créé)
@@ -83,12 +84,13 @@ src.providers.tts    ◄── config               │
 src.providers.stt    ◄── config  (state lazy) │
 src.providers.ai     ◄── config  (groq_client / claude_client lazy)
 src.providers.vision_ai ◄── config, core.state, providers.ai  (claude_client lazy)
+src.providers.ocr    ◄── config  (claude_client / providers.ai / pytesseract lazy)
 src.audio.speaker    ◄── core.state  (providers.tts lazy dans _jouer_tts)
 src.ai.groq_client   ◄── core.state           │
 src.ai.claude_client ◄── config  (anthropic + PIL lazy)
 src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
-src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations
-src.ocr.reader       ◄── core.state, audio.speaker, providers.ai
+src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations  (providers.vision_ai lazy dans mode_auto_scene)
+src.ocr.reader       ◄── core.state, audio.speaker  (providers.ocr lazy dans lire_texte)
 src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
 src.conversation.intents ◄── core.state, audio.speaker, providers.ai, providers.vision_ai, ocr.reader, gps.location
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
@@ -116,6 +118,24 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fallback local/Groq automatique.
 
 **Architecture hybride (économie de tokens) :** YOLO local tourne en continu (gratuit, 0 token). Claude n'est appelé que sur intention vocale (`شنو قدامي؟`) — **ou** périodiquement en mode sans micro si `VISION_AI_PROVIDER=claude` (voir `AUTO_DESCRIBE_INTERVAL`, coût continu). Leviers : appel à la demande, image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut. Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
+
+## Mode « Full Claude » (branche `feat/full-claude-assistant`)
+
+Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix inchangées (Claude ne fait pas d'audio). Activé **uniquement via `.env`** — les défauts du code restent gratuits.
+
+| Composant | Provider full-Claude | Modèle |
+|-----------|----------------------|--------|
+| Conversation darija | `AI_PROVIDER=claude` | `CLAUDE_TEXT_MODEL` (sonnet conseillé) |
+| Description scène (à la demande) | `VISION_AI_PROVIDER=claude` | `CLAUDE_VISION_MODEL_HQ` (sonnet) |
+| Description scène (auto, sans micro) | `VISION_AI_PROVIDER=claude` | `CLAUDE_VISION_MODEL` (haiku, éco) |
+| Lecture texte / OCR | `OCR_PROVIDER=claude` | `CLAUDE_VISION_MODEL_HQ` + fallback Tesseract |
+| STT (micro) | **reste** `groq` | Whisper |
+| TTS (voix) | **reste** `edge` | ar-MA-JamalNeural |
+
+**Stratégie MIXTE (coût/qualité) :** continu = Haiku (`CLAUDE_VISION_MODEL`), à la demande = Sonnet (`CLAUDE_VISION_MODEL_HQ`, déclenché par `hq=True` dans `describe_scene`).
+
+**Prompts accessibilité (`src/ai/claude_client.py`) :** trois prompts système dédiés —
+`_VISION_SYSTEM_PROMPT` (sécurité d'abord et avec insistance « عندك! », position+distance, action à faire, court), `_CHAT_SYSTEM_PROMPT` (compagnon darija patient), `_OCR_SYSTEM_PROMPT` (lit + donne le sens : courrier, médicaments, panneaux). Couvre rue + intérieur + lecture.
 
 ## Thread Synchronisation
 
@@ -145,8 +165,10 @@ absente. Provider selon `VISION_AI_PROVIDER` (claude payant / local gratuit).
 - **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → `providers.stt.transcribe()`; **timeout 8s**
 - **`get_ai_response(question)`** in `src/providers/ai.py` — routage vers `groq_darija()` / `claude_darija()` / openai
 - **`groq_darija(question)`** in `src/ai/groq_client.py` — LLaMA, 3 retries backoff (implémentation)
-- **`describe_scene(image, question)`** in `src/providers/vision_ai.py` — routage VLM (claude) ou fallback YOLO local + cooldown
-- **`claude_describe_scene(image, q)`** in `src/ai/claude_client.py` — Claude multimodal, image downscalée, usage loggé
+- **`describe_scene(image, question, hq=False)`** in `src/providers/vision_ai.py` — routage VLM (claude) ou fallback YOLO local. `hq=True` (question vocale) → modèle qualité (`CLAUDE_VISION_MODEL_HQ`) + ignore le cooldown ; `hq=False` (boucle auto) → modèle éco + cooldown
+- **`read_text(image)`** in `src/providers/ocr.py` — routage OCR claude / Tesseract local ; retourne toujours une phrase darija prête à parler
+- **`claude_describe_scene(image, q, model=None)` / `claude_read_text(image, model=None)`** in `src/ai/claude_client.py` — Claude multimodal (scène / OCR), image downscalée, usage loggé, modèle paramétrable
+- **`lire_texte()`** in `src/ocr/reader.py` — capture caméra → `providers.ocr.read_text()` → `parler()`
 - **`process_command(commande)`** in `src/conversation/intents.py` — retourne `False` pour arrêt
 - **`mode_conversation()`** in `src/conversation/commands.py` — boucle écoute + mot de réveil « مرافق » + fenêtre de suivi (`WAKE_FOLLOWUP_WINDOW`)
 - **`contient_wake(commande)` / `retirer_wake(commande)`** in `src/conversation/intents.py` — détection/retrait du mot de réveil
@@ -163,16 +185,18 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `STT_PROVIDER` | `groq` | `groq`, `openai`* | `src/providers/stt.py` |
 | `TTS_PROVIDER` | `edge` | `edge`, `gtts`, `elevenlabs` | `src/providers/tts.py` |
 | `VISION_AI_PROVIDER` | `local` | `local`, `claude` | `src/providers/vision_ai.py` |
+| `OCR_PROVIDER` | `local` | `local`, `claude` | `src/providers/ocr.py` |
 
 *options futures — structure prête, fallback automatique vers groq si clé absente.
-`claude` (AI + vision) : payant, fallback automatique vers groq/local si `ANTHROPIC_API_KEY` absente.
+`claude` (AI + vision + OCR) : payant, fallback automatique vers groq/local si `ANTHROPIC_API_KEY` absente.
+**Claude ne fait PAS d'audio** : STT reste Whisper/Groq, TTS reste edge-tts/ElevenLabs — un mode « 100% Claude » se limite au cerveau (langage + vision).
 
 **Règles :**
-1. Mode par défaut = gratuit (`groq` + `edge`). Ne jamais changer les défauts dans le code.
+1. Mode par défaut = gratuit (`groq` + `edge` + `local`). Ne jamais changer les défauts dans le code.
 2. Si clé payante absente → message clair + fallback gratuit automatique, jamais d'exception non gérée.
-3. YOLO, Tesseract OCR et GPS restent toujours locaux — jamais de provider cloud pour ces composants.
+3. YOLO et GPS restent toujours locaux. Tesseract reste le fallback OCR (et le défaut) — Claude OCR est opt-in.
 4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
-5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire`) — rester testable sur Windows sans matériel.
+5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire` / `read_text` / `lire_texte`) — rester testable sur Windows sans matériel.
 
 ## Configuration (config/settings.py)
 
@@ -194,13 +218,16 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `STT_MODEL` | `whisper-large-v3-turbo` | Modèle Whisper Groq (`whisper-large-v3` pour +précision) |
 | `TTS_PROVIDER` | `edge` | Provider TTS (edge / gtts / elevenlabs) |
 | `VISION_AI_PROVIDER` | `local` | Provider scène VLM (local YOLO / claude) |
+| `OCR_PROVIDER` | `local` | Provider lecture texte (local Tesseract / claude, fallback Tesseract) |
 | `ELEVENLABS_API_KEY` | `""` | Clé ElevenLabs (vide = fallback edge) |
 | `ELEVENLABS_VOICE_ID` | `""` | Voice ID ElevenLabs (vide = voix par défaut Adam) |
 | `OPENAI_API_KEY` | `""` | Clé OpenAI (non utilisé par défaut) |
 | `ANTHROPIC_API_KEY` | `""` | Clé Claude (vide = fallback groq/local) |
 | `CLAUDE_TEXT_MODEL` | `claude-haiku-4-5` | Modèle conversation darija (`claude_darija`) |
-| `CLAUDE_VISION_MODEL` | `claude-haiku-4-5` | Modèle VLM (opus-4-8 pour qualité max) |
-| `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse (parlée → courte) |
+| `CLAUDE_VISION_MODEL` | `claude-haiku-4-5` | Modèle VLM **continu** (boucle auto) — éco |
+| `CLAUDE_VISION_MODEL_HQ` | `=VISION_MODEL` | Modèle VLM **à la demande** (« شنو قدامي » + OCR) — qualité (sonnet) |
+| `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse scène/chat (parlée → courte) |
+| `CLAUDE_OCR_MAX_TOKENS` | `400` | Plafond réponse OCR (lettre/notice → plus longue) |
 | `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens) |
 | `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
@@ -275,6 +302,17 @@ pytest tests/ -v
 **GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
 **Limite connue (matérielle) :** micro+voix sur le même canal **Bluetooth HFP 8 kHz** (FreeBuds SE 3) → audio dégradé des deux côtés, écho résiduel et erreurs Whisper darija possibles. Correctif définitif = **micro USB séparé** (FreeBuds en sortie A2DP). Le mot de réveil compense côté fiabilité.
+
+## Branche `feat/full-claude-assistant` (cerveau 100% Claude)
+
+| Changement | Description | Fichiers |
+|-----------|-------------|----------|
+| Prompts accessibilité | `_VISION_SYSTEM_PROMPT` réécrit (sécurité d'abord + insistance « عندك! », position/distance, action, court) + nouveau `_OCR_SYSTEM_PROMPT` ; couvre rue/intérieur/lecture | `src/ai/claude_client.py` |
+| Modèle mixte | `describe_scene(..., hq=)` : Haiku en continu (`CLAUDE_VISION_MODEL`), Sonnet à la demande (`CLAUDE_VISION_MODEL_HQ`) ; `claude_describe_scene`/`claude_read_text` acceptent `model=` | `src/providers/vision_ai.py`, `src/ai/claude_client.py`, `src/conversation/intents.py`, `config/settings.py` |
+| OCR Claude | Nouveau provider `read_text()` (claude + fallback Tesseract) ; `reader.lire_texte()` simplifié (capture + parle) ; `claude_read_text()` + `CLAUDE_OCR_MAX_TOKENS` | `src/providers/ocr.py`, `src/ocr/reader.py`, `src/ai/claude_client.py`, `config/settings.py` |
+| `OCR_PROVIDER` | Routage OCR `local`/`claude` (défaut local) + tests | `config/settings.py`, `tests/test_providers.py` |
+
+**Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-4-6`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus.
 
 **Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-4-6`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). Coût vision : ~0.001 $/scène (Haiku 768px) → ~0.02-0.03 $/scène (Opus 1568px), à la demande seulement.
 

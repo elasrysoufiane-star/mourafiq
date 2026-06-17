@@ -26,29 +26,48 @@ import time
 from config.settings import (
     ANTHROPIC_API_KEY,
     CLAUDE_TEXT_MODEL, CLAUDE_VISION_MODEL,
-    CLAUDE_MAX_TOKENS, CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
+    CLAUDE_MAX_TOKENS, CLAUDE_OCR_MAX_TOKENS,
+    CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
 )
 
-# Prompt VISION — description de scène pour un malvoyant (sécurité, concision).
+# Prompt VISION — « les yeux » d'un malvoyant. Priorité absolue : la SÉCURITÉ,
+# annoncée en premier et avec insistance. Puis position, distance, et quoi faire.
+# Couvre la rue, l'intérieur et la lecture. Court (il écoute, il ne lit pas).
 _VISION_SYSTEM_PROMPT = (
-    'أنت مساعد بصري ذكي للمكفوفين في المغرب. '
-    'تتكلم الدارجة المغربية فقط. '
-    'وصف المشهد لي قدام المستخدم بإيجاز مفيد للسلامة: '
-    'الأشياء المهمة، الاتجاه، والمسافة التقريبية. '
-    'ردك قصير جدا — جملة وحدة ولا جوج بحال الإنسان لي كيهضر بسرعة. '
-    'أمثلة: كاين طبلة قدامك على بعد متر، وكرسي على اليمين / '
-    'الطريق سالكة، سير نيشان / حذاك باب على اليسار، حل بشوية'
+    'أنت "مرافق"، نتا هوما العينين د واحد المكفوف فالمغرب. '
+    'كتهضر غير الدارجة المغربية. دورك يتحرك بأمان ويفهم شنو دايرين بيه.\n'
+    'القواعد:\n'
+    '١. السلامة قبل كلشي: إلا كاين شي خطر (طوموبيل، دراجة، حفرة، درج، ماء، '
+    'حاجة طايحة، شي حد جاي عليه) قولو فاللول وبقوة وعاود حقق عليه: '
+    '"عندك! كاين درج قدامك بزاف، وقف!".\n'
+    '٢. كن دقيق فالمكان والمسافة: قدامك / على اليمين / على اليسار / وراك، '
+    'والمسافة بالتقريب: "حدا رجليك"، "على بعد خطوتين"، "بعيد شوية".\n'
+    '٣. قولو شنو يدير: "وقف"، "دور على اليمين"، "زيد بشوية"، "طلع بالعقل".\n'
+    '٤. قصير وواضح: جملة ولا جوج، الأهم فاللول.\n'
+    '٥. إلا الطريق سالمة طمنو: "الطريق سالكة، سير نيشان".\n'
+    '٦. إلا طلب منك تقرا شي مكتوب، قرا ليه النص وقولو المعنى بالدارجة.\n'
+    'كون هادي ومطمئن، بحال صاحب كيمشي حداه.'
 )
 
-# Prompt CONVERSATION — questions libres en darija (chaleureux, concis,
+# Prompt CONVERSATION — compagnon darija (chaleureux, concis, patient,
 # tolérant aux transcriptions imparfaites : demande de répéter au lieu d'inventer).
 _CHAT_SYSTEM_PROMPT = (
-    'أنت "مرافق"، مساعد ذكي للمكفوفين في المغرب. '
-    'كتهضر غير بالدارجة المغربية، بأسلوب دافئ ومطمئن. '
+    'أنت "مرافق"، مساعد وصاحب للمكفوفين في المغرب. '
+    'كتهضر غير بالدارجة المغربية، بأسلوب دافئ ومطمئن وصبور. '
     'جاوب بإيجاز: جملة ولا جوج، بحال واحد كيهضر مع صاحبو. '
     'إلا ما فهمتيش السؤال مزيان، طلب منو يعاودو بلطف، وما تختارعش الجواب. '
     'إلا بغا يعرف شنو قدامو قولو يقول "شنو قدامي"، '
     'وإلا بغا يقرا شي حاجة قولو يقول "قرا ليا".'
+)
+
+# Prompt OCR — lecture de texte pour un malvoyant. Lit ET donne le sens utile.
+_OCR_SYSTEM_PROMPT = (
+    'أنت "مرافق"، كتقرا للمكفوفين فالمغرب. شوف التصويرة وقرا النص لي فيها. '
+    'كتهضر غير الدارجة المغربية وكتكون واضح.\n'
+    '- إلا كانت رسالة ولا ورقة: قرا الأهم وقول المعنى بإيجاز.\n'
+    '- إلا كان دواء: قول سميتو والجرعة إلا بانو.\n'
+    '- إلا كانت لافطة ولا بلاكة ولا سومة: قول شنو مكتوب فيها.\n'
+    '- إلا ماكاينش نص واضح، قول غير: "ماكاين حتى نص نقدر نقراه".'
 )
 
 _client = None
@@ -129,15 +148,16 @@ def claude_darija(question: str) -> str:
     return 'عفوا ماقدرتش نفهم'
 
 
-def claude_describe_scene(image, question: str = 'شنو قدامي؟') -> str:
-    """Image (numpy RGB) + question → description de scène en darija."""
+def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur):
+    """Appel multimodal générique (image + texte) avec retries. Usine commune
+    à la description de scène et à la lecture OCR."""
     for tentative in range(3):
         try:
             data = _encode_image(image)
             resp = _get_client().messages.create(
-                model=CLAUDE_VISION_MODEL,
-                max_tokens=CLAUDE_MAX_TOKENS,
-                system=_system_block(_VISION_SYSTEM_PROMPT),
+                model=model,
+                max_tokens=max_tokens,
+                system=_system_block(system_prompt),
                 messages=[{'role': 'user', 'content': [
                     {'type': 'image', 'source': {
                         'type': 'base64',
@@ -147,16 +167,36 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟') -> str:
                     {'type': 'text', 'text': question},
                 ]}],
             )
-            _log_usage(resp, 'scene')
+            _log_usage(resp, tag)
             reponse = _extract_text(resp)
-            print(f'Claude scene: {reponse}')
+            print(f'Claude {tag}: {reponse}')
             return reponse
         except Exception as e:
             if _retryable(e) and tentative < 2:
                 attente = 5 * (2 ** tentative)
-                print(f'Quota Claude vision, attente {attente}s...')
+                print(f'Quota Claude {tag}, attente {attente}s...')
                 time.sleep(attente)
             else:
-                print(f'Erreur Claude vision: {e}')
-                return 'عفوا ماقدرتش نشوف مزيان'
-    return 'عفوا ماقدرتش نشوف مزيان'
+                print(f'Erreur Claude {tag}: {e}')
+                return erreur
+    return erreur
+
+
+def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None) -> str:
+    """Image (numpy RGB) + question → description de scène en darija.
+    `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande)."""
+    return _vision_call(
+        image, question, _VISION_SYSTEM_PROMPT,
+        model or CLAUDE_VISION_MODEL, CLAUDE_MAX_TOKENS,
+        'scene', 'عفوا ماقدرتش نشوف مزيان',
+    )
+
+
+def claude_read_text(image, model: str = None) -> str:
+    """Image (numpy RGB) → lecture + sens du texte en darija (OCR par VLM).
+    Plus de tokens que la scène (peut contenir une lettre entière)."""
+    return _vision_call(
+        image, 'قرا ليا هاد المكتوب', _OCR_SYSTEM_PROMPT,
+        model or CLAUDE_VISION_MODEL, CLAUDE_OCR_MAX_TOKENS,
+        'ocr', 'عفوا ماقدرتش نقرا',
+    )

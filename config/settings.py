@@ -23,6 +23,9 @@ DEMO_MODE    = os.environ.get('DEMO_MODE',    'free')
 AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai | claude
 STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
 TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
+# OCR : 'local' = Tesseract + Groq (gratuit, hors-ligne, défaut).
+# 'claude' = lecture par Claude vision (arabe/français/manuscrit), fallback Tesseract.
+OCR_PROVIDER = os.environ.get('OCR_PROVIDER', 'local')  # local | claude
 
 # Modèle STT Groq. Défaut = turbo (rapide, gratuit). Pour la précision max :
 # STT_MODEL=whisper-large-v3 (un peu plus lent, meilleure transcription darija).
@@ -46,9 +49,17 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 # Pour la qualité max : CLAUDE_VISION_MODEL=claude-opus-4-8 ($5/$25 par 1M).
 CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-haiku-4-5')
 CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
+# Modèle vision « haute qualité » pour les appels À LA DEMANDE (question vocale
+# « شنو قدامي؟ », lecture OCR) — réponse plus fine. La boucle auto continue, elle,
+# utilise CLAUDE_VISION_MODEL (moins cher). Défaut = même modèle (aucun surcoût
+# tant qu'on ne le règle pas sur sonnet/opus dans .env).
+CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', CLAUDE_VISION_MODEL)
 # Optimisation tokens : réponse parlée donc courte ; image redimensionnée +
 # compressée avant envoi (les tokens image montent avec la résolution).
 CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '150'))
+# La lecture OCR a besoin de plus de place qu'une description de scène
+# (rentre une lettre / notice entière) → plafond séparé, plus large.
+CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
 CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 # Anti double-appel : réutilise la dernière description si < N secondes.

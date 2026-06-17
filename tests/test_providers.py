@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import (
     DEMO_MODE,
-    AI_PROVIDER, STT_PROVIDER, TTS_PROVIDER, VISION_AI_PROVIDER,
+    AI_PROVIDER, STT_PROVIDER, TTS_PROVIDER, VISION_AI_PROVIDER, OCR_PROVIDER,
     ELEVENLABS_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
 )
 
@@ -19,6 +19,7 @@ _VALID_AI     = {'groq', 'openai', 'claude'}
 _VALID_STT    = {'groq', 'openai'}
 _VALID_TTS    = {'edge', 'gtts', 'elevenlabs'}
 _VALID_VISION = {'local', 'claude'}
+_VALID_OCR    = {'local', 'claude'}
 
 
 def test_demo_mode_type():
@@ -51,6 +52,12 @@ def test_vision_provider_type():
 def test_vision_provider_valid():
     assert VISION_AI_PROVIDER in _VALID_VISION, f"VISION_AI_PROVIDER='{VISION_AI_PROVIDER}' invalide (options: {_VALID_VISION})"
 
+def test_ocr_provider_type():
+    assert isinstance(OCR_PROVIDER, str)
+
+def test_ocr_provider_valid():
+    assert OCR_PROVIDER in _VALID_OCR, f"OCR_PROVIDER='{OCR_PROVIDER}' invalide (options: {_VALID_OCR})"
+
 def test_default_free_mode():
     """Sans clé payante, les providers par défaut doivent être les gratuits."""
     if not ELEVENLABS_API_KEY and not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
@@ -58,6 +65,7 @@ def test_default_free_mode():
         assert STT_PROVIDER       == 'groq',  "STT_PROVIDER par défaut doit être 'groq'"
         assert TTS_PROVIDER       == 'edge',  "TTS_PROVIDER par défaut doit être 'edge'"
         assert VISION_AI_PROVIDER == 'local', "VISION_AI_PROVIDER par défaut doit être 'local'"
+        assert OCR_PROVIDER       == 'local', "OCR_PROVIDER par défaut doit être 'local'"
 
 def test_elevenlabs_key_is_string():
     assert isinstance(ELEVENLABS_API_KEY, str)
@@ -84,11 +92,16 @@ def test_provider_vision_ai_importable():
     m = importlib.import_module('src.providers.vision_ai')
     assert hasattr(m, 'describe_scene'), "describe_scene manquant dans providers.vision_ai"
 
+def test_provider_ocr_importable():
+    m = importlib.import_module('src.providers.ocr')
+    assert hasattr(m, 'read_text'), "read_text manquant dans providers.ocr"
+
 def test_claude_client_importable():
     """Import lazy du SDK anthropic — le module doit s'importer sans la lib/clé."""
     m = importlib.import_module('src.ai.claude_client')
     assert hasattr(m, 'claude_darija'), "claude_darija manquant dans ai.claude_client"
     assert hasattr(m, 'claude_describe_scene'), "claude_describe_scene manquant"
+    assert hasattr(m, 'claude_read_text'), "claude_read_text manquant dans ai.claude_client"
 
 
 if __name__ == '__main__':
@@ -103,6 +116,8 @@ if __name__ == '__main__':
         test_tts_provider_valid,
         test_vision_provider_type,
         test_vision_provider_valid,
+        test_ocr_provider_type,
+        test_ocr_provider_valid,
         test_default_free_mode,
         test_elevenlabs_key_is_string,
         test_openai_key_is_string,
@@ -111,6 +126,7 @@ if __name__ == '__main__':
         test_provider_stt_importable,
         test_provider_tts_importable,
         test_provider_vision_ai_importable,
+        test_provider_ocr_importable,
         test_claude_client_importable,
     ]
     passed = 0

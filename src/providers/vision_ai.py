@@ -19,6 +19,7 @@ import time
 
 from config.settings import (
     VISION_AI_PROVIDER, ANTHROPIC_API_KEY, VISION_COOLDOWN, CONF_SEUIL,
+    CLAUDE_VISION_MODEL, CLAUDE_VISION_MODEL_HQ,
 )
 from src.core import state
 from src.providers.ai import get_ai_response
@@ -27,16 +28,23 @@ _last_time = 0.0
 _last_desc = ''
 
 
-def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
-    """Décrit la scène via le provider configuré. Retourne une phrase darija."""
+def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = False) -> str:
+    """Décrit la scène via le provider configuré. Retourne une phrase darija.
+
+    hq=True  → appel À LA DEMANDE (question vocale) : modèle haute qualité
+               (CLAUDE_VISION_MODEL_HQ, ex. Sonnet) + on ignore le cache (réponse
+               fraîche à une vraie question).
+    hq=False → boucle automatique continue : modèle économique
+               (CLAUDE_VISION_MODEL, ex. Haiku) + cooldown anti double-appel.
+    """
     global _last_time, _last_desc
     now = time.time()
-    if _last_desc and (now - _last_time) < VISION_COOLDOWN:
+    if not hq and _last_desc and (now - _last_time) < VISION_COOLDOWN:
         return _last_desc
 
     if VISION_AI_PROVIDER == 'claude':
         if ANTHROPIC_API_KEY:
-            desc = _claude_scene(image, question)
+            desc = _claude_scene(image, question, hq)
         else:
             print('ANTHROPIC_API_KEY manquant — fallback vision locale (YOLO)')
             desc = _local_scene(image)
@@ -47,9 +55,10 @@ def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
     return desc
 
 
-def _claude_scene(image, question: str) -> str:
+def _claude_scene(image, question: str, hq: bool) -> str:
     from src.ai.claude_client import claude_describe_scene
-    return claude_describe_scene(image, question)
+    model = CLAUDE_VISION_MODEL_HQ if hq else CLAUDE_VISION_MODEL
+    return claude_describe_scene(image, question, model=model)
 
 
 def _local_scene(image) -> str:

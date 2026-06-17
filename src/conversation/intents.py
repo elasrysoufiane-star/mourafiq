@@ -50,10 +50,11 @@ def process_command(commande: str) -> bool:
 
     # Description de la scène à la demande — VLM (Claude) ou fallback YOLO local.
     # La question vocale est transmise telle quelle au VLM (ex. « واش كاين شي حد؟ »).
+    # hq=True → modèle haute qualité (Sonnet) car c'est une vraie question posée.
     elif any(m in commande for m in KEYWORDS_VISION):
         with state.camera_lock:
             img = state.camera.capture_array()
-        parler(describe_scene(img, commande))
+        parler(describe_scene(img, commande, hq=True))
 
     # Lecture OCR
     elif any(m in commande for m in KEYWORDS_OCR):
