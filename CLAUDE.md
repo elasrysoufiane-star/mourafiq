@@ -174,7 +174,11 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
 | `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
 | `MODEL_PATH` | `models/yolov8n.pt` | Chemin modèle YOLO |
-| `GPS_PORT` | `/dev/ttyS0` | Port série GPS |
+| `GPS_PORT` | `/dev/ttyS0` | Port série GPS (env-overridable) |
+| `GPS_BAUD` | `9600` | Baud GPS (env-overridable) |
+| `GPS_READ_TIMEOUT` | `3` | Durée max lecture NMEA (s) avant abandon |
+| `GEOCODE_ENABLED` | `1` | Reverse geocoding lat/lon → adresse (Nominatim) ; 0 = coords brutes |
+| `GEOCODE_TIMEOUT` | `5` | Timeout requête Nominatim (s) |
 | `AI_PROVIDER` | `groq` | Provider NLP (groq / claude / openai) |
 | `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
 | `TTS_PROVIDER` | `edge` | Provider TTS (edge / gtts / elevenlabs) |
@@ -248,6 +252,10 @@ pytest tests/ -v
 | Stop keyword | `سلام` (salut) → `سلامة` (adieu) : le salut n'arrête plus l'app | `src/conversation/intents.py` |
 | Bienvenue | Phrase d'accueil « مرافق » annonçant les commandes clés | `src/core/app.py` |
 | Log TTS | Affiche le moteur réel (edge/gtts/elevenlabs) | `src/providers/tts.py` |
+| GPS robustesse | `get_gps()` : accepte GGA toutes constellations (GNGGA/GPGGA…), vérifie `gps_qual` (fix réel), lecture bornée `GPS_READ_TIMEOUT`, trame corrompue ignorée ; `GPS_PORT/BAUD` env-overridable | `src/gps/location.py`, `config/settings.py` |
+| GPS reverse geocoding | `reverse_geocode()` (Nominatim OSM, stdlib `urllib`, cache ~11 m) → « vous êtes Boulevard X، quartier Y، ville ». `position_actuelle()` centralise « وين أنا » (adresse réelle, fallback coords). Fallback propre si pas d'Internet | `src/gps/location.py`, `src/conversation/intents.py` |
+
+**GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
 **Limite connue (matérielle) :** micro+voix sur le même canal **Bluetooth HFP 8 kHz** (FreeBuds SE 3) → audio dégradé des deux côtés, écho résiduel et erreurs Whisper darija possibles. Correctif définitif = **micro USB séparé** (FreeBuds en sortie A2DP). Le mot de réveil compense côté fiabilité.
 
