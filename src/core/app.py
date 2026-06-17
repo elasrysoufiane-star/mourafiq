@@ -13,7 +13,7 @@ from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
 from src.vision.detector import mode_vision, mode_auto_scene
 from src.conversation.commands import mode_conversation
-from src.gps.location import init_gps
+from src.gps.location import init_gps, position_actuelle
 
 
 def _verifier_config():
@@ -97,6 +97,13 @@ def main():
 
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
            'باش نوصف ليك لي قدامك، "قرا ليا" للقراءة، ولا "وين أنا" للموقع. أنا معاك.')
+
+    if state.gps_serial:
+        pos = position_actuelle()
+        if pos:
+            parler(pos)
+        else:
+            parler('ماقدرتش نلقى موقعك دابا، خرج برا باش يتقى الإشارة')
 
     t1 = threading.Thread(target=mode_vision, name='Vision', daemon=True)
     t1.start()
