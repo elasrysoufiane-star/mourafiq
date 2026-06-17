@@ -59,7 +59,8 @@ def calibrer_micro() -> int:
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
-                        rate=16000, input=True, frames_per_buffer=1024)
+                        rate=16000, input=True, frames_per_buffer=1024,
+                        input_device_index=1)
     volumes = []
     for _ in range(30):
         data = stream.read(1024, exception_on_overflow=False)
@@ -98,7 +99,7 @@ def reconnaitre_voix() -> str:
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
-                        rate=16000, input=True, frames_per_buffer=1024)
+                        rate=16000, input=True, frames_per_buffer=1024, input_device_index=1)
 
     # Purge le tampon micro (écho résiduel du haut-parleur capté au démarrage).
     for _ in range(_PURGE_CHUNKS):
