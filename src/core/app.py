@@ -67,21 +67,25 @@ def init():
     print('Connexion GPS...')
     state.gps_serial = init_gps()
 
-    # Vérification micro
+    # Vérification micro → state.mic_ok pilote le lancement du thread conversation.
     print('Vérification micro...')
     import pyaudio
     with suprimer_alsa():
         _p = pyaudio.PyAudio()
     try:
         _info = _p.get_default_input_device_info()
+        state.mic_ok = True
         print(f'Micro détecté: {_info["name"]}')
     except Exception:
-        print('AVERTISSEMENT: Aucun micro détecté !')
+        state.mic_ok = False
+        print('AVERTISSEMENT: Aucun micro détecté → mode vision seul (pas d\'écoute).')
     _p.terminate()
 
-    # Calibration bruit ambiant (2s) → calcule VOL_SEUIL
-    print('Calibration bruit ambiant (2s)...')
-    state.VOL_SEUIL = calibrer_micro()
+    # Calibration bruit ambiant (2s) → calcule VOL_SEUIL.
+    # Sautée sans micro (lirait du silence / planterait sur un index absent).
+    if state.mic_ok:
+        print('Calibration bruit ambiant (2s)...')
+        state.VOL_SEUIL = calibrer_micro()
 
     print('Tout est prêt !')
     print('=' * 50)
@@ -94,11 +98,17 @@ def main():
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
            'باش نوصف ليك لي قدامك، "قرا ليا" للقراءة، ولا "وين أنا" للموقع. أنا معاك.')
 
-    t1 = threading.Thread(target=mode_vision,       name='Vision',       daemon=True)
-    t2 = threading.Thread(target=mode_conversation, name='Conversation',  daemon=True)
+    t1 = threading.Thread(target=mode_vision, name='Vision', daemon=True)
     t1.start()
-    t2.start()
-    print('Vision + Conversation actifs !')
+
+    # Thread conversation lancé UNIQUEMENT si un micro est présent — sinon
+    # mode vision seul (évite la boucle « En attente de voix → Timeout 8s »).
+    if state.mic_ok:
+        t2 = threading.Thread(target=mode_conversation, name='Conversation', daemon=True)
+        t2.start()
+        print('Vision + Conversation actifs !')
+    else:
+        print('Vision seule active (pas de micro — écoute désactivée).')
 
     try:
         while True:

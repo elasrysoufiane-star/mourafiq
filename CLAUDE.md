@@ -124,11 +124,16 @@ Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fa
 | Vision | `mode_vision()` | `src/vision/detector.py` |
 | Conversation | `mode_conversation()` | `src/conversation/commands.py` |
 
+Le thread **Conversation n'est lancé que si un micro est détecté** (`state.mic_ok`).
+Sans micro → **mode vision seul** : `app.init()` met `mic_ok=False`, saute la calibration,
+et `main()` ne démarre pas l'écoute (évite la boucle « En attente de voix → Timeout 8s »).
+
 | Primitive | Type | Rôle |
 |-----------|------|------|
 | `camera_lock` | `Lock` | Sérialise `camera.capture_array()` |
 | `audio_lock` | `Lock` | Sérialise `parler()` |
 | `conversation_active` | `Event` | **Pause vision pendant audio seulement** — géré dans `speaker.parler()` uniquement |
+| `mic_ok` | `bool` | Micro détecté au démarrage. `False` → thread conversation non lancé (vision seule) |
 
 ## Key Functions
 
@@ -259,6 +264,7 @@ pytest tests/ -v
 | Log TTS | Affiche le moteur réel (edge/gtts/elevenlabs) | `src/providers/tts.py` |
 | GPS robustesse | `get_gps()` : accepte GGA toutes constellations (GNGGA/GPGGA…), vérifie `gps_qual` (fix réel), lecture bornée `GPS_READ_TIMEOUT`, trame corrompue ignorée ; `GPS_PORT/BAUD` env-overridable | `src/gps/location.py`, `config/settings.py` |
 | GPS reverse geocoding | `reverse_geocode()` (Nominatim OSM, stdlib `urllib`, cache ~11 m) → « vous êtes Boulevard X، quartier Y، ville ». `position_actuelle()` centralise « وين أنا » (adresse réelle, fallback coords). Fallback propre si pas d'Internet | `src/gps/location.py`, `src/conversation/intents.py` |
+| Mode vision seul | Sans micro : `init()` met `state.mic_ok=False`, saute la calibration, `main()` ne lance pas le thread conversation → plus de boucle « En attente de voix → Timeout 8s » | `src/core/app.py`, `src/core/state.py` |
 
 **GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
