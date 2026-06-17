@@ -170,6 +170,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | Constante | Défaut | Rôle |
 |-----------|--------|------|
 | `GROQ_API_KEY` | `os.environ.get(...)` | Vide si absent (erreur levée dans app.init()) |
+| `DEMO_MODE` | `free` | `free` (logique normale) ou `demo` (documentation uniquement) |
 | `CONF_SEUIL` | `0.50` | Seuil confiance YOLO (tester 0.45 si détection insuffisante) |
 | `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
 | `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
@@ -181,14 +182,18 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `GEOCODE_TIMEOUT` | `5` | Timeout requête Nominatim (s) |
 | `AI_PROVIDER` | `groq` | Provider NLP (groq / claude / openai) |
 | `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
+| `STT_MODEL` | `whisper-large-v3-turbo` | Modèle Whisper Groq (`whisper-large-v3` pour +précision) |
 | `TTS_PROVIDER` | `edge` | Provider TTS (edge / gtts / elevenlabs) |
 | `VISION_AI_PROVIDER` | `local` | Provider scène VLM (local YOLO / claude) |
 | `ELEVENLABS_API_KEY` | `""` | Clé ElevenLabs (vide = fallback edge) |
+| `ELEVENLABS_VOICE_ID` | `""` | Voice ID ElevenLabs (vide = voix par défaut Adam) |
 | `OPENAI_API_KEY` | `""` | Clé OpenAI (non utilisé par défaut) |
 | `ANTHROPIC_API_KEY` | `""` | Clé Claude (vide = fallback groq/local) |
+| `CLAUDE_TEXT_MODEL` | `claude-haiku-4-5` | Modèle conversation darija (`claude_darija`) |
 | `CLAUDE_VISION_MODEL` | `claude-haiku-4-5` | Modèle VLM (opus-4-8 pour qualité max) |
 | `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse (parlée → courte) |
 | `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens) |
+| `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
