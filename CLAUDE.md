@@ -66,7 +66,9 @@ mourafiq/
 ├── tests/
 │   ├── test_config.py
 │   ├── test_translations.py
-│   └── test_intents.py
+│   ├── test_intents.py             # inclut mot de réveil (contient_wake/retirer_wake)
+│   ├── test_providers.py           # routage AI/STT/TTS/vision + clés
+│   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
 └── logs/                           # Logs runtime (auto-créé)
 ```
@@ -230,6 +232,30 @@ pytest tests/ -v
 | models/ | `yolov8n.pt` déplacé via `git mv` | `models/yolov8n.pt` |
 | Providers | `src/providers/` — AI/STT/TTS configurables via `.env` | `src/providers/` |
 | python-dotenv | Chargement automatique de `.env` au démarrage | `config/settings.py` |
+
+## Fixes & Features (2026-06-17) — branche `feat/claude-vision-assistant`
+
+État courant après la session « Claude vision + fiabilité écoute ».
+
+| Changement | Description | Fichiers |
+|-----------|-------------|----------|
+| Claude VLM | Description de scène à la demande (`describe_scene`), hybride YOLO local + Claude | `src/ai/claude_client.py`, `src/providers/vision_ai.py`, `src/conversation/intents.py` |
+| Prompts séparés | `_VISION_SYSTEM_PROMPT` (scène) vs `_CHAT_SYSTEM_PROMPT` (conversation darija) | `src/ai/claude_client.py` |
+| Mot de réveil | « مرافق » + fenêtre de suivi `WAKE_FOLLOWUP_WINDOW` ; `WAKE_WORD_ENABLED=0` = continu | `src/conversation/commands.py`, `intents.py`, `config/settings.py` |
+| Anti-écho STT | Purge ~0.4s micro + attente fin parole + filtre captures trop courtes | `src/audio/listener.py` |
+| Prompt Whisper | Liste de mots-clés retirée (Whisper la recrachait) → indice de langue court | `src/providers/stt.py` |
+| `STT_MODEL` | Modèle Whisper configurable (`whisper-large-v3` pour +précision) | `config/settings.py`, `src/providers/stt.py` |
+| Stop keyword | `سلام` (salut) → `سلامة` (adieu) : le salut n'arrête plus l'app | `src/conversation/intents.py` |
+| Bienvenue | Phrase d'accueil « مرافق » annonçant les commandes clés | `src/core/app.py` |
+| Log TTS | Affiche le moteur réel (edge/gtts/elevenlabs) | `src/providers/tts.py` |
+
+**Limite connue (matérielle) :** micro+voix sur le même canal **Bluetooth HFP 8 kHz** (FreeBuds SE 3) → audio dégradé des deux côtés, écho résiduel et erreurs Whisper darija possibles. Correctif définitif = **micro USB séparé** (FreeBuds en sortie A2DP). Le mot de réveil compense côté fiabilité.
+
+**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-4-6`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). Coût vision : ~0.001 $/scène (Haiku 768px) → ~0.02-0.03 $/scène (Opus 1568px), à la demande seulement.
+
+## Maintenance de ce fichier (économie de tokens)
+
+Ce CLAUDE.md est chargé dans **chaque** session. Le tenir à jour après chaque changement significatif évite aux prochaines sessions de ré-explorer le code (gros poste de tokens). Règle : après un edit notable (nouveau module, nouvelle constante config, fix de comportement), mettre à jour la table concernée ici **dans le même commit**. Rester concis — ne pas dupliquer ce que le code/les commits disent déjà.
 
 ## Known Non-Issues
 
