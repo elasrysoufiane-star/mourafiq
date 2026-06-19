@@ -4,13 +4,25 @@ Routage selon AI_PROVIDER dans config/settings.py.
 
 Providers supportés :
   groq   — LLaMA 3.1-8b-instant (défaut, gratuit)
-  claude — Claude (Anthropic), réponses darija (payant, fallback groq si clé absente)
+  claude — Claude (Anthropic), réponses darija. Tenté en premier si la clé est
+           présente ; ne bascule vers Groq qu'en cas d'erreur réseau/connexion
+           (pas Internet) — pas pour une autre raison (quota, clé invalide…
+           ces erreurs remontent normalement).
   openai — GPT-4o-mini (futur, fallback groq si clé absente)
 
 Ne jamais importer groq_client/claude_client au niveau module — import lazy
 pour rester testable sur Windows sans matériel.
 """
+import socket
+import urllib.error
+
 from config.settings import AI_PROVIDER, OPENAI_API_KEY, ANTHROPIC_API_KEY
+
+# Erreurs réseau/connexion uniquement — pas d'Internet ou hôte injoignable.
+# anthropic.APIConnectionError hérite de ces causes mais on capte large ici
+# via le type de base pour rester sans dépendance dure à anthropic.
+_NETWORK_ERRORS = (socket.gaierror, ConnectionError, TimeoutError, OSError,
+                    urllib.error.URLError)
 
 
 def get_ai_response(question: str) -> str:
@@ -19,7 +31,20 @@ def get_ai_response(question: str) -> str:
         if not ANTHROPIC_API_KEY:
             print('ANTHROPIC_API_KEY manquant — fallback Groq')
         else:
-            return _claude_darija(question)
+            try:
+                return _claude_darija(question)
+            except _NETWORK_ERRORS as e:
+                print(f'Claude inaccessible (pas d\'Internet ?) — fallback Groq: {e}')
+            except Exception as e:
+                # anthropic lève ses propres exceptions (APIConnectionError, etc.)
+                # qui ne sont pas forcément des sous-classes des types réseau
+                # stdlib ci-dessus — on filtre sur le nom pour rester sans
+                # dépendance dure au SDK anthropic.
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'Claude inaccessible (pas d\'Internet ?) — fallback Groq: {e}')
+                else:
+                    raise
+        return _groq_darija(question)
     if AI_PROVIDER == 'openai':
         if not OPENAI_API_KEY:
             print('OPENAI_API_KEY manquant — fallback Groq')
