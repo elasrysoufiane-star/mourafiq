@@ -80,14 +80,16 @@ mourafiq/
 config.settings ──────────────────────────────┐ (stdlib + dotenv seulement)
 src.vision.translations ──────────────────────┤ (rien)
 src.core.state ───────────────────────────────┤ (threading seulement)
+src.core.memory ──────────────────────────────┤ (config + threading — historique conversation)
+src.audio.text_clean ─────────────────────────┤ (re seulement — nettoyage Markdown TTS)
 src.providers.tts    ◄── config               │
 src.providers.stt    ◄── config  (state lazy) │
 src.providers.ai     ◄── config  (groq_client / claude_client lazy)
 src.providers.vision_ai ◄── config, core.state, providers.ai  (claude_client lazy)
 src.providers.ocr    ◄── config  (claude_client / providers.ai / pytesseract lazy)
-src.audio.speaker    ◄── core.state  (providers.tts lazy dans _jouer_tts)
+src.audio.speaker    ◄── core.state, audio.text_clean  (providers.tts lazy dans _jouer_tts)
 src.ai.groq_client   ◄── core.state           │
-src.ai.claude_client ◄── config  (anthropic + PIL lazy)
+src.ai.claude_client ◄── config, core.memory  (anthropic + PIL lazy)
 src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
 src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations  (providers.vision_ai lazy dans mode_auto_scene)
 src.ocr.reader       ◄── core.state, audio.speaker  (providers.ocr lazy dans lire_texte)
@@ -234,6 +236,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto en mode sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
+| `CONV_MEMORY_TURNS` | `6` | Tours (user+assistant) gardés en contexte Claude → questions de suivi. 0 = sans mémoire |
 
 ## Imports matériels — lazy loading
 
@@ -261,6 +264,7 @@ python3 tests/test_config.py
 python3 tests/test_translations.py
 python3 tests/test_intents.py
 python3 tests/test_providers.py
+python3 tests/test_memory.py        # mémoire conversation + nettoyage TTS
 # ou
 pytest tests/ -v
 ```
@@ -311,6 +315,8 @@ pytest tests/ -v
 | Modèle mixte | `describe_scene(..., hq=)` : Haiku en continu (`CLAUDE_VISION_MODEL`), Sonnet à la demande (`CLAUDE_VISION_MODEL_HQ`) ; `claude_describe_scene`/`claude_read_text` acceptent `model=` | `src/providers/vision_ai.py`, `src/ai/claude_client.py`, `src/conversation/intents.py`, `config/settings.py` |
 | OCR Claude | Nouveau provider `read_text()` (claude + fallback Tesseract) ; `reader.lire_texte()` simplifié (capture + parle) ; `claude_read_text()` + `CLAUDE_OCR_MAX_TOKENS` | `src/providers/ocr.py`, `src/ocr/reader.py`, `src/ai/claude_client.py`, `config/settings.py` |
 | `OCR_PROVIDER` | Routage OCR `local`/`claude` (défaut local) + tests | `config/settings.py`, `tests/test_providers.py` |
+| Mémoire conversation | `src/core/memory.py` : historique roulant TEXTE (`CONV_MEMORY_TURNS` tours) PARTAGÉ chat+vision+OCR → questions de suivi (« وزيد على اليسار؟ », « عاود », « زيدني تفاصيل »). Préfixé à chaque appel Claude ; images jamais stockées ; boucle auto sans micro (`hq=False`) ne mémorise pas (`remember=hq`). Pairage strict user→assistant | `src/core/memory.py`, `src/ai/claude_client.py`, `src/providers/vision_ai.py`, `config/settings.py`, `tests/test_memory.py` |
+| Nettoyage TTS | `src/audio/text_clean.py` `clean_for_speech()` retire le Markdown (gras/listes/titres) avant synthèse — sinon edge-tts lit `*`/`-` littéralement. Appelé dans `parler()`. Consigne anti-Markdown ajoutée aux 3 prompts système (`_NO_MARKDOWN`) | `src/audio/text_clean.py`, `src/audio/speaker.py`, `src/ai/claude_client.py`, `tests/test_memory.py` |
 
 **Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-4-6`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus.
 

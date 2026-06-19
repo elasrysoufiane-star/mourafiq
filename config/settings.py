@@ -112,3 +112,12 @@ TIMEOUT_ECOUTE = int(8 * 16000 / 1024)
 # (écho, bruit, hallucinations Whisper). WAKE_WORD_ENABLED=0 → écoute continue.
 WAKE_WORD_ENABLED    = os.environ.get('WAKE_WORD_ENABLED', '1') not in ('0', 'false', 'False', '')
 WAKE_FOLLOWUP_WINDOW = float(os.environ.get('WAKE_FOLLOWUP_WINDOW', '15'))
+
+# ── Mémoire de conversation ───────────────────────────────────────────────────
+# Nombre de tours (échange user+assistant) gardés en contexte et renvoyés à
+# Claude → permet une vraie discussion avec questions de suivi : « وزيد على
+# اليسار؟ », « عاود », « زيدني تفاصيل », sans tout réexpliquer. Partagée entre le
+# chat et la vision À LA DEMANDE (la boucle auto sans micro ne l'alimente pas).
+# 0 = sans mémoire (chaque tour isolé, comportement précédent). Plus haut = plus
+# de contexte mais plus de tokens par appel.
+CONV_MEMORY_TURNS = int(os.environ.get('CONV_MEMORY_TURNS', '6'))

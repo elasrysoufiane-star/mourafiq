@@ -8,13 +8,16 @@ conversation_active est activé UNIQUEMENT ici, pendant la sortie audio.
 La vision tourne librement pendant l'écoute micro.
 """
 from src.core import state
+from src.audio.text_clean import clean_for_speech
 
 
 def parler(texte: str) -> None:
     """
     Synthétise et joue du texte en darija marocaine.
-    Active conversation_active pendant toute la durée de la sortie audio.
+    Nettoie le Markdown (gras/listes/titres) avant de parler — sinon le TTS le
+    lit littéralement. Active conversation_active pendant toute la sortie audio.
     """
+    texte = clean_for_speech(texte)
     state.conversation_active.set()
     with state.audio_lock:
         try:

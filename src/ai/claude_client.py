@@ -29,6 +29,15 @@ from config.settings import (
     CLAUDE_MAX_TOKENS, CLAUDE_OCR_MAX_TOKENS,
     CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
 )
+from src.core import memory
+
+# Consigne anti-Markdown commune : le texte part en TTS, qui lit les `*` et `-`
+# littéralement. On l'ajoute à chaque prompt système (la synthèse a aussi un
+# nettoyage de secours dans src/audio/text_clean.py).
+_NO_MARKDOWN = (
+    '\nهضر بحال واحد كيهضر بفمو: بلا نجوم (*)، بلا نقط (-)، بلا لائحة، '
+    'بلا عناوين. غير جمل عادية.'
+)
 
 # Prompt VISION — « les yeux » d'un malvoyant. Priorité absolue : la SÉCURITÉ,
 # annoncée en premier et avec insistance. Puis position, distance, et quoi faire.
@@ -47,6 +56,7 @@ _VISION_SYSTEM_PROMPT = (
     '٥. إلا الطريق سالمة طمنو: "الطريق سالكة، سير نيشان".\n'
     '٦. إلا طلب منك تقرا شي مكتوب، قرا ليه النص وقولو المعنى بالدارجة.\n'
     'كون هادي ومطمئن، بحال صاحب كيمشي حداه.'
+    + _NO_MARKDOWN
 )
 
 # Prompt CONVERSATION — compagnon darija (chaleureux, concis, patient,
@@ -58,6 +68,7 @@ _CHAT_SYSTEM_PROMPT = (
     'إلا ما فهمتيش السؤال مزيان، طلب منو يعاودو بلطف، وما تختارعش الجواب. '
     'إلا بغا يعرف شنو قدامو قولو يقول "شنو قدامي"، '
     'وإلا بغا يقرا شي حاجة قولو يقول "قرا ليا".'
+    + _NO_MARKDOWN
 )
 
 # Prompt OCR — lecture de texte pour un malvoyant. Lit ET donne le sens utile.
@@ -68,6 +79,7 @@ _OCR_SYSTEM_PROMPT = (
     '- إلا كان دواء: قول سميتو والجرعة إلا بانو.\n'
     '- إلا كانت لافطة ولا بلاكة ولا سومة: قول شنو مكتوب فيها.\n'
     '- إلا ماكاينش نص واضح، قول غير: "ماكاين حتى نص نقدر نقراه".'
+    + _NO_MARKDOWN
 )
 
 _client = None
@@ -131,11 +143,12 @@ def claude_darija(question: str) -> str:
                 model=CLAUDE_TEXT_MODEL,
                 max_tokens=CLAUDE_MAX_TOKENS,
                 system=_system_block(_CHAT_SYSTEM_PROMPT),
-                messages=[{'role': 'user', 'content': question}],
+                messages=memory.get_history() + [{'role': 'user', 'content': question}],
             )
             _log_usage(resp, 'texte')
             reponse = _extract_text(resp)
             print(f'Claude darija: {reponse}')
+            memory.add_turn(question, reponse)
             return reponse
         except Exception as e:
             if _retryable(e) and tentative < 2:
@@ -148,9 +161,15 @@ def claude_darija(question: str) -> str:
     return 'عفوا ماقدرتش نفهم'
 
 
-def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur):
+def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur,
+                 remember=False):
     """Appel multimodal générique (image + texte) avec retries. Usine commune
-    à la description de scène et à la lecture OCR."""
+    à la description de scène et à la lecture OCR.
+
+    remember=True → enregistre l'échange (question + réponse texte) dans la
+    mémoire de conversation pour les questions de suivi. L'IMAGE n'est jamais
+    mémorisée (coût + obsolète) ; en revanche l'historique TEXTE est préfixé à
+    l'appel pour donner le contexte (« وزيد على اليسار؟ », « زيدني تفاصيل »)."""
     for tentative in range(3):
         try:
             data = _encode_image(image)
@@ -158,7 +177,7 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur)
                 model=model,
                 max_tokens=max_tokens,
                 system=_system_block(system_prompt),
-                messages=[{'role': 'user', 'content': [
+                messages=memory.get_history() + [{'role': 'user', 'content': [
                     {'type': 'image', 'source': {
                         'type': 'base64',
                         'media_type': 'image/jpeg',
@@ -170,6 +189,8 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur)
             _log_usage(resp, tag)
             reponse = _extract_text(resp)
             print(f'Claude {tag}: {reponse}')
+            if remember:
+                memory.add_turn(question, reponse)
             return reponse
         except Exception as e:
             if _retryable(e) and tentative < 2:
@@ -182,21 +203,25 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur)
     return erreur
 
 
-def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None) -> str:
+def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None,
+                          remember: bool = True) -> str:
     """Image (numpy RGB) + question → description de scène en darija.
-    `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande)."""
+    `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande).
+    `remember` : True à la demande (suivi possible), False en boucle auto
+    sans micro (pas de conversation + évite un coût/contexte qui grossit)."""
     return _vision_call(
         image, question, _VISION_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_MAX_TOKENS,
-        'scene', 'عفوا ماقدرتش نشوف مزيان',
+        'scene', 'عفوا ماقدرتش نشوف مزيان', remember=remember,
     )
 
 
 def claude_read_text(image, model: str = None) -> str:
     """Image (numpy RGB) → lecture + sens du texte en darija (OCR par VLM).
-    Plus de tokens que la scène (peut contenir une lettre entière)."""
+    Plus de tokens que la scène (peut contenir une lettre entière).
+    Mémorisé (remember=True) → suivi possible : « عاود », « شنو التاريخ؟ »."""
     return _vision_call(
         image, 'قرا ليا هاد المكتوب', _OCR_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_OCR_MAX_TOKENS,
-        'ocr', 'عفوا ماقدرتش نقرا',
+        'ocr', 'عفوا ماقدرتش نقرا', remember=True,
     )

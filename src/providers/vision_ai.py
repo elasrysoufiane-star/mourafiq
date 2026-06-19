@@ -58,7 +58,9 @@ def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = Fals
 def _claude_scene(image, question: str, hq: bool) -> str:
     from src.ai.claude_client import claude_describe_scene
     model = CLAUDE_VISION_MODEL_HQ if hq else CLAUDE_VISION_MODEL
-    return claude_describe_scene(image, question, model=model)
+    # hq=True = question vocale → mémorise (suivi possible). hq=False = boucle
+    # auto sans micro → pas de mémoire (pas de conversation + coût continu).
+    return claude_describe_scene(image, question, model=model, remember=hq)
 
 
 def _local_scene(image) -> str:
