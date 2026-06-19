@@ -15,7 +15,9 @@ Règles :
 
 Import claude_client en lazy (dans _claude_scene) — testable Windows sans clé.
 """
+import socket
 import time
+import urllib.error
 
 from config.settings import (
     VISION_AI_PROVIDER, ANTHROPIC_API_KEY, VISION_COOLDOWN, CONF_SEUIL,
@@ -26,6 +28,10 @@ from src.providers.ai import get_ai_response
 _last_time = 0.0
 _last_desc = ''
 
+# Erreurs réseau/connexion uniquement — pas d'Internet ou hôte injoignable.
+_NETWORK_ERRORS = (socket.gaierror, ConnectionError, TimeoutError, OSError,
+                    urllib.error.URLError)
+
 
 def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
     """Décrit la scène via le provider configuré. Retourne une phrase darija."""
@@ -35,11 +41,21 @@ def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
         return _last_desc
 
     if VISION_AI_PROVIDER == 'claude':
-        if ANTHROPIC_API_KEY:
-            desc = _claude_scene(image, question)
-        else:
+        if not ANTHROPIC_API_KEY:
             print('ANTHROPIC_API_KEY manquant — fallback vision locale (YOLO)')
             desc = _local_scene(image)
+        else:
+            try:
+                desc = _claude_scene(image, question)
+            except _NETWORK_ERRORS as e:
+                print(f'Claude inaccessible (pas d\'Internet ?) — fallback YOLO: {e}')
+                desc = _local_scene(image)
+            except Exception as e:
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'Claude inaccessible (pas d\'Internet ?) — fallback YOLO: {e}')
+                    desc = _local_scene(image)
+                else:
+                    raise
     else:
         desc = _local_scene(image)
 
