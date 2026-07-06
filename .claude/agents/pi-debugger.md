@@ -14,8 +14,9 @@ Connaissances spécifiques au projet (vérifie-les dans le code avant de conclur
   HUAWEI FreeBuds SE 3 = ÉCHEC connu avec PipeWire, ne pas suggérer.
 - Limite matérielle connue : micro+voix sur un même canal Bluetooth HFP 8 kHz
   → audio dégradé, écho, erreurs Whisper. Correctif définitif = micro USB séparé.
-- Sans micro détecté : `state.mic_ok=False`, pas de thread conversation,
-  mode AutoScene toutes les `AUTO_DESCRIBE_INTERVAL` s.
+- AutoScene tourne TOUJOURS (`AUTO_DESCRIBE_INTERVAL` s), avec ou sans micro.
+  Sans micro détecté : `state.mic_ok=False`, pas de thread conversation en plus
+  (écoute désactivée), mais la description automatique continue.
 - Caméra : PiCamera2 640×480 RGB888, `camera_lock` sérialise les captures.
   Traceback `Picamera2.close()` sur Ctrl+C = bug connu, PAS fonctionnel.
 - GPS : NMEA sur `/dev/ttyS0` 9600 bauds, accepte GGA toutes constellations,

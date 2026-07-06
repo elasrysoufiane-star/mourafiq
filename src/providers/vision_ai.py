@@ -66,7 +66,8 @@ def _claude_scene(image, question: str, hq: bool) -> str:
     from src.ai.claude_client import claude_describe_scene
     model = CLAUDE_VISION_MODEL_HQ if hq else CLAUDE_VISION_MODEL
     # hq=True = question vocale → mémorise (suivi possible). hq=False = boucle
-    # auto sans micro → pas de mémoire (pas de conversation + coût continu).
+    # auto de fond (narration continue, pas un tour de dialogue) → pas de
+    # mémoire, pour éviter un contexte qui grossit en continu.
     return claude_describe_scene(image, question, model=model, remember=hq)
 
 

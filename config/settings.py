@@ -72,7 +72,8 @@ CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 HQ_CAPTURE_ENABLED = os.environ.get('HQ_CAPTURE_ENABLED', '1') not in ('0', 'false', 'False', '')
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
-# Description automatique de scène en mode SANS MICRO (pas de commande vocale).
+# Description automatique de scène, TOUJOURS active (avec ou sans micro, que
+# l'utilisateur parle ou non) — tourne en parallèle de la conversation.
 # Toutes les N secondes : capture → describe_scene() → parle. 0 = désactivé.
 # Pour utiliser Claude ici : VISION_AI_PROVIDER=claude + ANTHROPIC_API_KEY.
 # Attention coût si provider=claude (≈720 appels/h à 5s) — voir CLAUDE.md.

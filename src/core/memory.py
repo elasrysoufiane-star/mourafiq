@@ -9,8 +9,9 @@ Pourquoi en texte seulement :
     n'est plus valable) ; la description textuelle, elle, reste utile pour
     enchaîner — « زيدني تفاصيل » s'appuie sur ce que Claude vient de décrire.
 
-La boucle auto sans micro (describe_scene hq=False) N'alimente PAS la mémoire
-(pas de conversation + coût continu) — voir remember= dans claude_client.
+La boucle auto de fond (describe_scene hq=False) N'alimente PAS la mémoire —
+narration continue, pas un tour de dialogue, coût continu — voir remember=
+dans claude_client. Elle tourne en permanence, avec ou sans micro.
 
 Pairage strict user→assistant : un tour n'est enregistré que si les DEUX textes
 sont présents. L'historique commence donc toujours par 'user' et alterne, comme

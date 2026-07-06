@@ -51,10 +51,12 @@ def mode_vision() -> None:
 
 def mode_auto_scene() -> None:
     """
-    Boucle de description automatique — mode SANS MICRO uniquement.
-    Toutes les AUTO_DESCRIBE_INTERVAL secondes : capture → describe_scene() → parle.
-    Comme il n'y a pas de commande vocale (« شنو قدامي؟ ») pour déclencher la
-    description, cette boucle prend le relais.
+    Boucle de description automatique — TOUJOURS active (avec ou sans micro,
+    que l'utilisateur parle ou non). Toutes les AUTO_DESCRIBE_INTERVAL
+    secondes : capture → describe_scene() → parle. Tourne en parallèle du
+    thread Conversation ; une commande vocale (« شنو قدامي؟ ») déclenche en
+    plus une description immédiate à la demande, sans jamais couper cette
+    boucle de fond (mêmes verrous `camera_lock` / `audio_lock`).
 
     describe_scene() route selon VISION_AI_PROVIDER :
       • 'claude' (+ ANTHROPIC_API_KEY) → Claude VLM (payant, description riche)

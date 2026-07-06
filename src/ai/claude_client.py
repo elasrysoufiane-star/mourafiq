@@ -229,8 +229,9 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
                           remember: bool = True) -> str:
     """Image (numpy RGB) + question → description de scène en darija.
     `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande).
-    `remember` : True à la demande (suivi possible), False en boucle auto
-    sans micro (pas de conversation + évite un coût/contexte qui grossit).
+    `remember` : True à la demande (suivi possible), False en boucle auto de
+    fond (narration continue, pas un tour de dialogue — évite un contexte
+    qui grossit en continu).
     ClaudeError si échec → providers.vision_ai bascule sur YOLO local."""
     return _vision_call(
         image, question, _VISION_SYSTEM_PROMPT,

@@ -47,8 +47,10 @@ AUTO_DESCRIBE_INTERVAL=8
 - **`thinking`** : sur claude-sonnet-5 le thinking adaptatif est actif par
   défaut si le paramètre est omis → le code le désactive explicitement
   (`_THINKING_OFF` dans `src/ai/claude_client.py`). Ne pas retirer.
-- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (mode sans micro) :
-  5 s ≈ 720 appels/h. Le mode avec micro ne paie qu'à la demande.
+- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** — la boucle AutoScene
+  tourne TOUJOURS (avec ou sans micro) : 5 s ≈ 720 appels/h en continu, en
+  plus des appels à la demande si micro. Monter l'intervalle (ou VISION_AI_PROVIDER=local)
+  pour limiter la facture si un micro est aussi actif.
 - **Image** : l'OCR et la scène à la demande capturent un still PLEINE
   RÉSOLUTION (`HQ_CAPTURE_ENABLED=1`, `src/vision/camera.py`), réduit à
   `CLAUDE_IMG_MAX_PX` avant envoi → régler `CLAUDE_IMG_MAX_PX=1568` (lisible,

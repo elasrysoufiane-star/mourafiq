@@ -124,7 +124,7 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fallback local/Groq automatique.
 
-**Architecture hybride (économie de tokens) :** YOLO local tourne en continu (gratuit, 0 token). Claude n'est appelé que sur intention vocale (`شنو قدامي؟`) — **ou** périodiquement en mode sans micro si `VISION_AI_PROVIDER=claude` (voir `AUTO_DESCRIBE_INTERVAL`, coût continu). Leviers : appel à la demande, image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut. Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
+**Architecture hybride (économie de tokens) :** YOLO local tourne en continu (gratuit, 0 token). Claude est appelé sur intention vocale (`شنو قدامي؟`) **et** en permanence par la boucle AutoScene (voir `AUTO_DESCRIBE_INTERVAL`, coût continu, tourne avec ou sans micro) si `VISION_AI_PROVIDER=claude`. Leviers : image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut en continu (Sonnet à la demande). Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
 
 ## Mode « Full Claude » (branche `feat/full-claude-assistant`)
 
@@ -134,7 +134,7 @@ Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix inchangées 
 |-----------|----------------------|--------|
 | Conversation darija | `AI_PROVIDER=claude` | `CLAUDE_TEXT_MODEL` (sonnet conseillé) |
 | Description scène (à la demande) | `VISION_AI_PROVIDER=claude` | `CLAUDE_VISION_MODEL_HQ` (sonnet) |
-| Description scène (auto, sans micro) | `VISION_AI_PROVIDER=claude` | `CLAUDE_VISION_MODEL` (haiku, éco) |
+| Description scène (auto, toujours active) | `VISION_AI_PROVIDER=claude` | `CLAUDE_VISION_MODEL` (haiku, éco) |
 | Lecture texte / OCR | `OCR_PROVIDER=claude` | `CLAUDE_VISION_MODEL_HQ` + fallback Tesseract |
 | STT (micro) | **reste** `groq` | Whisper |
 | TTS (voix) | **reste** `edge` | ar-MA-JamalNeural |
@@ -149,22 +149,25 @@ Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix inchangées 
 | Thread | Fonction | Fichier |
 |--------|----------|---------|
 | Vision | `mode_vision()` | `src/vision/detector.py` |
-| Conversation | `mode_conversation()` | `src/conversation/commands.py` |
-| AutoScene (sans micro) | `mode_auto_scene()` | `src/vision/detector.py` |
+| AutoScene (toujours actif) | `mode_auto_scene()` | `src/vision/detector.py` |
+| Conversation (si micro) | `mode_conversation()` | `src/conversation/commands.py` |
 
-Le thread **Conversation n'est lancé que si un micro est détecté** (`state.mic_ok`).
-Sans micro → **mode vision seul** : `app.init()` met `mic_ok=False`, saute la calibration,
-et `main()` ne démarre pas l'écoute (évite la boucle « En attente de voix → Timeout 8s »).
-À la place, si `AUTO_DESCRIBE_INTERVAL > 0`, le thread **AutoScene** décrit la scène
-toutes les N secondes (`describe_scene()` → `parler()`) — remplace la commande vocale
-absente. Provider selon `VISION_AI_PROVIDER` (claude payant / local gratuit).
+**AutoScene tourne TOUJOURS** (`AUTO_DESCRIBE_INTERVAL > 0`), que l'utilisateur
+parle ou non, avec ou sans micro : toutes les N secondes, `capture → describe_scene()
+→ parler()` décrit la caméra en détail par la voix. `state.mic_ok` ne pilote plus
+que le thread **Conversation** (écoute + réponse), lancé EN PLUS d'AutoScene si un
+micro est détecté (`app.init()` sonde le micro et saute la calibration si absent —
+évite la boucle « En attente de voix → Timeout 8s »). Résultat : la scène est
+toujours décrite ; si l'utilisateur parle, l'assistant répond aussi, sans jamais
+couper la narration automatique. Provider (Claude payant / YOLO local gratuit)
+piloté par `VISION_AI_PROVIDER`.
 
 | Primitive | Type | Rôle |
 |-----------|------|------|
-| `camera_lock` | `Lock` | Sérialise `camera.capture_array()` |
-| `audio_lock` | `Lock` | Sérialise `parler()` |
-| `conversation_active` | `Event` | **Pause vision pendant audio seulement** — géré dans `speaker.parler()` uniquement |
-| `mic_ok` | `bool` | Micro détecté au démarrage. `False` → thread conversation non lancé (vision seule) |
+| `camera_lock` | `Lock` | Sérialise `camera.capture_array()` (partagé Vision/AutoScene/Conversation) |
+| `audio_lock` | `Lock` | Sérialise `parler()` (partagé entre les 3 threads) |
+| `conversation_active` | `Event` | **Pause vision/description pendant la sortie audio uniquement** — géré dans `speaker.parler()` uniquement |
+| `mic_ok` | `bool` | Micro détecté au démarrage. `False` → thread Conversation non lancé (AutoScene reste actif) |
 
 ## Key Functions
 
@@ -239,7 +242,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
 | `HQ_CAPTURE_ENABLED` | `1` | Still pleine résolution capteur pour OCR + scène à la demande (`capturer(hq=True)`, switch_mode ~0.5-1s). 0 = tout en 640×480 |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
-| `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto en mode sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
+| `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto TOUJOURS active, avec ou sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
 | `MIC_DEVICE_INDEX` | `1` | Index micro PyAudio (1 = pipewire, défaut historique Pi). `-1` = micro par défaut système (à utiliser avec un micro USB) |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
@@ -331,6 +334,7 @@ pytest tests/ -v
 | Fallbacks réels (2026-07-06) | Avant : `claude_client` avalait tout échec en phrase d'erreur → les fallbacks documentés étaient du code MORT (Claude en panne = assistant muet). Maintenant : `ClaudeError` levée après retries, la couche providers bascule — chat→Groq, scène→YOLO local, OCR→Tesseract. Un échec ne pollue pas la mémoire de conversation. Testé sans réseau ni SDK | `src/ai/claude_client.py`, `src/providers/ai.py`, `src/providers/vision_ai.py`, `tests/test_fallbacks.py` |
 | Scène locale hors-ligne (2026-07-06) | `_local_scene` phrase via le dictionnaire darija local (`_phraser_objets` : dédoublonnage + jointure « ، ») au lieu d'un appel Groq — instantané, marche SANS Internet (dernier maillon de secours des yeux), même voix que le thread vision. Groq uniquement pour les objets hors dictionnaire | `src/providers/vision_ai.py`, `tests/test_fallbacks.py` |
 | VAD webrtcvad (2026-07-06) | Détection de parole par webrtcvad (mode 2, trames 20 ms, majorité voisée + plancher volume 150) au lieu du seuil d'amplitude seul — filtre le bruit (trafic, chocs) sur micro Bluetooth HFP dégradé → moins de fausses captures/appels Whisper. Fallback automatique seuil de volume si lib absente. `MIC_DEVICE_INDEX` remplace l'index micro `1` codé en dur (`-1` = défaut système, prêt pour un futur micro USB). Sur le Pi : `pip install webrtcvad` | `src/audio/listener.py`, `config/settings.py`, `requirements.txt`, `tests/test_listener.py` |
+| AutoScene toujours actif (2026-07-06) | Avant : `mode_auto_scene()` ne démarrait que si **aucun micro** n'était détecté (`elif` exclusif avec `mode_conversation()`) → avec micro, la description de scène ne se déclenchait que sur la commande vocale « شنو قدامي؟ ». Maintenant : AutoScene démarre **toujours** si `AUTO_DESCRIBE_INTERVAL > 0`, et Conversation démarre **en plus** si un micro est détecté — les deux threads tournent en parallèle (mêmes `camera_lock`/`audio_lock`/`conversation_active` qu'avant). Résultat : la caméra est décrite en détail par la voix en continu, que l'utilisateur parle ou non ; s'il parle, l'assistant répond en plus, sans jamais couper la narration. ⚠️ Coût : si `VISION_AI_PROVIDER=claude`, les appels auto continuent même avec micro — voir `.claude/skills/tune-claude/SKILL.md` | `src/core/app.py`, `src/vision/detector.py`, `config/settings.py`, `.env.example` |
 
 **Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
 

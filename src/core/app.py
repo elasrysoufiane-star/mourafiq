@@ -120,21 +120,26 @@ def main():
 
     t1 = threading.Thread(target=mode_vision, name='Vision', daemon=True)
     t1.start()
+    actifs = ['Vision']
 
-    # Thread conversation lancé UNIQUEMENT si un micro est présent — sinon
-    # mode vision seul (évite la boucle « En attente de voix → Timeout 8s »).
+    # AutoScene tourne TOUJOURS (que l'utilisateur parle ou non) — description
+    # détaillée périodique de la caméra par la voix, indépendante du micro.
+    if AUTO_DESCRIBE_INTERVAL > 0:
+        t3 = threading.Thread(target=mode_auto_scene, name='AutoScene', daemon=True)
+        t3.start()
+        actifs.append(f'AutoScene ({AUTO_DESCRIBE_INTERVAL:.0f}s)')
+
+    # Conversation lancée EN PLUS si un micro est présent — répond aux questions
+    # sans jamais couper la description automatique de la scène.
     if state.mic_ok:
         t2 = threading.Thread(target=mode_conversation, name='Conversation', daemon=True)
         t2.start()
-        print('Vision + Conversation actifs !')
-    elif AUTO_DESCRIBE_INTERVAL > 0:
-        # Sans micro : pas de commande vocale → description automatique périodique.
-        t3 = threading.Thread(target=mode_auto_scene, name='AutoScene', daemon=True)
-        t3.start()
-        print(f'Vision + description auto ({AUTO_DESCRIBE_INTERVAL:.0f}s) actives '
-              '(pas de micro).')
+        actifs.append('Conversation')
     else:
-        print('Vision seule active (pas de micro — écoute désactivée).')
+        print('AVERTISSEMENT: pas de micro détecté — écoute désactivée, '
+              'seule la description automatique de la scène est active.')
+
+    print(' + '.join(actifs) + ' actifs !')
 
     try:
         while True:
