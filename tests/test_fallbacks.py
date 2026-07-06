@@ -119,6 +119,30 @@ def test_vision_fallback_local():
          providers_vision._last_desc, providers_vision._last_time) = anciens
 
 
+def test_phraser_objets_hors_ligne():
+    """Objets connus → phrases du dictionnaire local, SANS appel réseau."""
+    from src.vision.translations import traductions
+    resultat = providers_vision._phraser_objets(['person', 'car', 'person'])
+    assert traductions['person'] in resultat
+    assert traductions['car'] in resultat
+    # Dédoublonné : 'person' détecté 2 fois → une seule phrase
+    assert resultat.count(traductions['person']) == 1
+
+
+def test_phraser_objets_vide():
+    assert providers_vision._phraser_objets([]) == 'الطريق واضحة ماكاين والو'
+
+
+def test_phraser_objets_inconnus_via_groq():
+    """Objets hors dictionnaire → reformulation via get_ai_response."""
+    ancien = providers_vision.get_ai_response
+    providers_vision.get_ai_response = lambda q: 'جواب من غروق'
+    try:
+        assert providers_vision._phraser_objets(['zebra']) == 'جواب من غروق'
+    finally:
+        providers_vision.get_ai_response = ancien
+
+
 def test_ocr_fallback_tesseract():
     """OCR_PROVIDER=claude + Claude en panne → lecture Tesseract locale."""
     anciens = (providers_ocr.OCR_PROVIDER, providers_ocr.ANTHROPIC_API_KEY,
@@ -143,6 +167,9 @@ if __name__ == '__main__':
         test_claude_ocr_leve_claude_error,
         test_ai_fallback_groq,
         test_vision_fallback_local,
+        test_phraser_objets_hors_ligne,
+        test_phraser_objets_vide,
+        test_phraser_objets_inconnus_via_groq,
         test_ocr_fallback_tesseract,
     ]
     passed = 0

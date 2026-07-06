@@ -23,6 +23,7 @@ from config.settings import (
 )
 from src.core import state
 from src.providers.ai import get_ai_response
+from src.vision.translations import traductions
 
 _last_time = 0.0
 _last_desc = ''
@@ -70,15 +71,28 @@ def _claude_scene(image, question: str, hq: bool) -> str:
 
 
 def _local_scene(image) -> str:
-    """Fallback gratuit : YOLO local → liste d'objets → phrase darija via Groq."""
+    """Fallback gratuit : YOLO local → phrase darija.
+    Priorité au dictionnaire local (hors-ligne, instantané, même voix que le
+    thread vision) ; Groq uniquement pour les objets hors dictionnaire."""
     r = state.model(image, verbose=False)[0]
     objets = [
         r.names[int(box.cls)]
         for box in r.boxes[:3]
         if float(box.conf) > CONF_SEUIL
     ]
-    if objets:
-        return get_ai_response(
-            f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'
-        )
-    return 'الطريق واضحة ماكاين والو'
+    return _phraser_objets(objets)
+
+
+def _phraser_objets(objets: list) -> str:
+    """Liste de classes YOLO → phrase darija prête à parler.
+    100% local si les objets sont dans le dictionnaire (marche SANS Internet —
+    c'est le dernier maillon de secours des yeux) ; sinon reformulation Groq."""
+    if not objets:
+        return 'الطريق واضحة ماكاين والو'
+    # dict.fromkeys : dédoublonne en gardant l'ordre (3 boxes 'person' → 1 phrase)
+    phrases = [traductions[o] for o in dict.fromkeys(objets) if o in traductions]
+    if phrases:
+        return '، '.join(phrases)
+    return get_ai_response(
+        f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'
+    )
