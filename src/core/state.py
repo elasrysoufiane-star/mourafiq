@@ -15,6 +15,7 @@ conversation_active = threading.Event()
 
 # ── Objets matériels (initialisés par app.init()) ─────────────────────────────
 camera      = None   # Picamera2
+camera_still_cfg = None  # config still HQ (OCR / scène à la demande) — None = indisponible
 model       = None   # ultralytics.YOLO
 groq_client = None   # groq.Groq
 gps_serial  = None   # serial.Serial

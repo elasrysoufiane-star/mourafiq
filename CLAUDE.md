@@ -44,6 +44,7 @@ mourafiq/
 │   │   ├── speaker.py              # parler(), suprimer_alsa(), calibrer_micro()
 │   │   └── listener.py             # reconnaitre_voix(), _transcrire()
 │   ├── vision/
+│   │   ├── camera.py               # capturer(hq=) — flux 640×480 ou still pleine résolution
 │   │   ├── detector.py             # mode_vision() — boucle YOLO
 │   │   └── translations.py         # Dict YOLO COCO → phrases darija
 │   ├── ocr/
@@ -80,6 +81,7 @@ mourafiq/
 config.settings ──────────────────────────────┐ (stdlib + dotenv seulement)
 src.vision.translations ──────────────────────┤ (rien)
 src.core.state ───────────────────────────────┤ (threading seulement)
+src.vision.camera ◄── core.state              │ (capture 640×480 / still HQ)
 src.core.memory ──────────────────────────────┤ (config + threading — historique conversation)
 src.audio.text_clean ─────────────────────────┤ (re seulement — nettoyage Markdown TTS)
 src.providers.tts    ◄── config               │
@@ -91,10 +93,10 @@ src.audio.speaker    ◄── core.state, audio.text_clean  (providers.tts lazy
 src.ai.groq_client   ◄── core.state           │
 src.ai.claude_client ◄── config, core.memory  (anthropic + PIL lazy)
 src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
-src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations  (providers.vision_ai lazy dans mode_auto_scene)
-src.ocr.reader       ◄── core.state, audio.speaker  (providers.ocr lazy dans lire_texte)
+src.vision.detector  ◄── config, core.state, audio.speaker, vision.camera, vision.translations  (providers.vision_ai lazy dans mode_auto_scene)
+src.ocr.reader       ◄── audio.speaker, vision.camera  (providers.ocr lazy dans lire_texte)
 src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
-src.conversation.intents ◄── core.state, audio.speaker, providers.ai, providers.vision_ai, ocr.reader, gps.location
+src.conversation.intents ◄── audio.speaker, providers.ai, providers.vision_ai, vision.camera, ocr.reader, gps.location
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
 src.core.app         ◄── config, core.state, audio.speaker, audio.listener,
                           vision.detector, conversation.commands, gps.location
@@ -231,8 +233,9 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `CLAUDE_VISION_MODEL_HQ` | `=VISION_MODEL` | Modèle VLM **à la demande** (« شنو قدامي » + OCR) — qualité (sonnet) |
 | `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse scène/chat (parlée → courte) |
 | `CLAUDE_OCR_MAX_TOKENS` | `400` | Plafond réponse OCR (lettre/notice → plus longue) |
-| `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens) |
+| `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens). Monter à 1568 pour profiter du still HQ |
 | `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
+| `HQ_CAPTURE_ENABLED` | `1` | Still pleine résolution capteur pour OCR + scène à la demande (`capturer(hq=True)`, switch_mode ~0.5-1s). 0 = tout en 640×480 |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
 | `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto en mode sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
@@ -319,10 +322,11 @@ pytest tests/ -v
 | Mémoire conversation | `src/core/memory.py` : historique roulant TEXTE (`CONV_MEMORY_TURNS` tours) PARTAGÉ chat+vision+OCR → questions de suivi (« وزيد على اليسار؟ », « عاود », « زيدني تفاصيل »). Préfixé à chaque appel Claude ; images jamais stockées ; boucle auto sans micro (`hq=False`) ne mémorise pas (`remember=hq`). Pairage strict user→assistant | `src/core/memory.py`, `src/ai/claude_client.py`, `src/providers/vision_ai.py`, `config/settings.py`, `tests/test_memory.py` |
 | Nettoyage TTS | `src/audio/text_clean.py` `clean_for_speech()` retire le Markdown (gras/listes/titres) avant synthèse — sinon edge-tts lit `*`/`-` littéralement. Appelé dans `parler()`. Consigne anti-Markdown ajoutée aux 3 prompts système (`_NO_MARKDOWN`) | `src/audio/text_clean.py`, `src/audio/speaker.py`, `src/ai/claude_client.py`, `tests/test_memory.py` |
 | Thinking off (2026-07-06) | `thinking={'type':'disabled'}` (`_THINKING_OFF`) explicite sur tous les `messages.create` — sur `claude-sonnet-5` le thinking adaptatif est ACTIF par défaut si omis → mangerait `max_tokens=150` + latence vocale. Nécessite un SDK anthropic récent sur le Pi (`pip install -U anthropic`) | `src/ai/claude_client.py` |
+| Capture HQ (2026-07-06) | `src/vision/camera.py` `capturer(hq=)` centralise les captures (camera_lock inclus). OCR + scène à la demande → still PLEINE RÉSOLUTION via `switch_mode_and_capture_array` (~0.5-1s) ; boucles YOLO/auto → flux 640×480. Fallback silencieux 640×480 si still indisponible. `HQ_CAPTURE_ENABLED=0` pour désactiver. Mettre `CLAUDE_IMG_MAX_PX=1568` dans .env pour en profiter | `src/vision/camera.py`, `src/core/app.py`, `src/core/state.py`, `src/ocr/reader.py`, `src/conversation/intents.py`, `src/vision/detector.py`, `config/settings.py` |
 
 **Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
 
-**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-5`), `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. ⚠️ `CLAUDE_IMG_MAX_PX` > 640 est sans effet : la caméra capture en 640×480 (`thumbnail` ne fait que réduire) — la vraie limite qualité OCR est la résolution caméra (voir `.claude/memory/decisions.md`).
+**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-5`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
 
 ## Dossier `.claude/` (agents, skills, mémoire projet)
 

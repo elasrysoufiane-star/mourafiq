@@ -7,7 +7,10 @@ import time
 import threading
 import subprocess
 
-from config.settings import GROQ_API_KEY, MODEL_PATH, BASE_DIR, AUTO_DESCRIBE_INTERVAL
+from config.settings import (
+    GROQ_API_KEY, MODEL_PATH, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
+    HQ_CAPTURE_ENABLED,
+)
 from src.core import state
 from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
@@ -50,6 +53,16 @@ def init():
         main={'format': 'RGB888', 'size': (640, 480)}
     )
     state.camera.configure(cam_cfg)
+    # Config still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et
+    # la scène à la demande — utilisée ponctuellement via switch_mode dans
+    # src/vision/camera.py. La boucle YOLO garde le flux 640×480 rapide.
+    if HQ_CAPTURE_ENABLED:
+        try:
+            state.camera_still_cfg = state.camera.create_still_configuration(
+                main={'format': 'RGB888'}
+            )
+        except Exception as e:
+            print(f'AVERTISSEMENT: still HQ indisponible ({e}) → captures 640×480')
     state.camera.start()
     time.sleep(2)  # stabilisation caméra
 

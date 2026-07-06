@@ -8,6 +8,7 @@ import time
 from config.settings import CONF_SEUIL, AUTO_DESCRIBE_INTERVAL
 from src.core import state
 from src.audio.speaker import parler
+from src.vision.camera import capturer
 from src.vision.translations import traductions
 
 
@@ -27,8 +28,7 @@ def mode_vision() -> None:
                 time.sleep(0.5)
                 continue
 
-            with state.camera_lock:
-                img = state.camera.capture_array()
+            img = capturer()  # flux 640×480 — rapide, suffisant pour YOLO
 
             results = state.model(img, verbose=False)
             for r in results:
@@ -72,8 +72,7 @@ def mode_auto_scene() -> None:
             if state.conversation_active.is_set():
                 continue
 
-            with state.camera_lock:
-                img = state.camera.capture_array()
+            img = capturer()  # flux 640×480 — boucle éco, pas de still HQ ici
 
             desc = describe_scene(img)
             if desc:

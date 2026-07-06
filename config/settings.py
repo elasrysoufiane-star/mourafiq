@@ -62,6 +62,11 @@ CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '150'))
 CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
 CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
+# Capture still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et la
+# scène à la demande, via switch_mode (~0.5-1s, ponctuel). La boucle YOLO garde
+# le flux 640×480. 0 = désactivé (tout en 640×480, comportement d'avant).
+# Monter CLAUDE_IMG_MAX_PX (.env) pour que le still profite vraiment au VLM.
+HQ_CAPTURE_ENABLED = os.environ.get('HQ_CAPTURE_ENABLED', '1') not in ('0', 'false', 'False', '')
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # Description automatique de scène en mode SANS MICRO (pas de commande vocale).

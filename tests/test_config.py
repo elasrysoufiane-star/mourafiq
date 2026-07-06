@@ -17,6 +17,7 @@ from config.settings import (
     AUDIO_MP3,
     AUDIO_WAV,
     MODEL_PATH,
+    HQ_CAPTURE_ENABLED,
 )
 
 
@@ -77,6 +78,17 @@ def test_audio_wav_extension():
     assert AUDIO_WAV.endswith('.wav')
 
 
+def test_hq_capture_enabled_bool():
+    """HQ_CAPTURE_ENABLED doit être un booléen (parsing env robuste)."""
+    assert isinstance(HQ_CAPTURE_ENABLED, bool)
+
+
+def test_camera_module_importable():
+    """src.vision.camera doit s'importer sans matériel (Windows)."""
+    from src.vision.camera import capturer
+    assert callable(capturer)
+
+
 if __name__ == '__main__':
     tests = [
         test_conf_seuil_range,
@@ -90,6 +102,8 @@ if __name__ == '__main__':
         test_paths_in_project,
         test_audio_mp3_extension,
         test_audio_wav_extension,
+        test_hq_capture_enabled_bool,
+        test_camera_module_importable,
     ]
     passed = 0
     failed = 0

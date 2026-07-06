@@ -36,10 +36,20 @@ sonnet-4-6, sonnet-5, opus-4-8). Nécessite un SDK anthropic récent sur le Pi
 complexe — dans ce cas l'activer seulement sur l'appel HQ et monter
 `CLAUDE_MAX_TOKENS`.
 
-## 2026-07-06 — Amélioration vision identifiée mais NON faite : capture haute résolution pour OCR
+## 2026-07-06 — Capture haute résolution pour OCR / scène à la demande (FAIT)
 
-La caméra capture en 640×480 (choisi pour la vitesse YOLO sur Pi 4). C'est LA
-limite de qualité pour lire une lettre ou une notice de médicament — pas le
-modèle. Piste : capture still haute résolution (ex. 2028×1520) déclenchée
-uniquement pour `lire_texte()` / appel HQ, en gardant 640×480 pour la boucle
-YOLO. À faire dans `src/core/app.py` (config caméra) + `src/ocr/reader.py`.
+**Décision** : `src/vision/camera.py` `capturer(hq=)` centralise toutes les
+captures (avec `camera_lock`). `hq=True` (OCR + « شنو قدامي ») → still PLEINE
+résolution capteur via `switch_mode_and_capture_array` (~0.5-1 s, ponctuel) ;
+boucles YOLO/auto → flux 640×480 inchangé. `.env` : `CLAUDE_IMG_MAX_PX=1568`.
+
+**Pourquoi** : 640×480 était LA limite pour lire une lettre/notice — pas le
+modèle. Le switch_mode ponctuel évite de ralentir YOLO (un flux haute
+résolution permanent aurait tué le FPS sur Pi 4). Le still est réduit à
+`CLAUDE_IMG_MAX_PX` avant envoi → la boucle continue (source 640px) ne coûte
+pas un token de plus.
+
+**Garde-fous** : `HQ_CAPTURE_ENABLED=0` désactive tout (retour comportement
+640×480) ; échec still → fallback silencieux flux vidéo, jamais d'exception.
+**À valider sur le Pi** : latence réelle du switch_mode et couleurs du still
+(même format RGB888 que le flux — devrait être identique).

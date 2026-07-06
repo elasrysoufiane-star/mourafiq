@@ -4,10 +4,10 @@ Routage des commandes vocales vers les actions correspondantes.
 Les constantes KEYWORDS_* sont définies au niveau module pour être
 importables et testables sans dépendances matérielles.
 """
-from src.core import state
 from src.audio.speaker import parler
 from src.providers.ai import get_ai_response
 from src.providers.vision_ai import describe_scene
+from src.vision.camera import capturer
 from src.ocr.reader import lire_texte
 from src.gps.location import position_actuelle, naviguer
 
@@ -52,8 +52,7 @@ def process_command(commande: str) -> bool:
     # La question vocale est transmise telle quelle au VLM (ex. « واش كاين شي حد؟ »).
     # hq=True → modèle haute qualité (Sonnet) car c'est une vraie question posée.
     elif any(m in commande for m in KEYWORDS_VISION):
-        with state.camera_lock:
-            img = state.camera.capture_array()
+        img = capturer(hq=True)  # still haute résolution — vraie question posée
         parler(describe_scene(img, commande, hq=True))
 
     # Lecture OCR

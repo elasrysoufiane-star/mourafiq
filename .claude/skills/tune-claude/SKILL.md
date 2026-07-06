@@ -49,8 +49,11 @@ AUTO_DESCRIBE_INTERVAL=8
   (`_THINKING_OFF` dans `src/ai/claude_client.py`). Ne pas retirer.
 - **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (mode sans micro) :
   5 s ≈ 720 appels/h. Le mode avec micro ne paie qu'à la demande.
-- **Image** : caméra 640×480 → `CLAUDE_IMG_MAX_PX=768` ne réduit jamais rien ;
-  monter cette valeur ne sert à rien sans monter la résolution caméra.
+- **Image** : l'OCR et la scène à la demande capturent un still PLEINE
+  RÉSOLUTION (`HQ_CAPTURE_ENABLED=1`, `src/vision/camera.py`), réduit à
+  `CLAUDE_IMG_MAX_PX` avant envoi → régler `CLAUDE_IMG_MAX_PX=1568` (lisible,
+  ~2400 tokens ≈ $0.005/lecture en sonnet-5). La boucle continue reste en
+  640×480 quelle que soit cette valeur (jamais agrandie → coût inchangé).
 - **STT/TTS restent hors Claude** : Whisper via Groq (gratuit) + edge-tts
   (gratuit). `STT_MODEL=whisper-large-v3` = meilleure transcription darija.
 - Vérifier le coût réel dans les logs : chaque appel imprime

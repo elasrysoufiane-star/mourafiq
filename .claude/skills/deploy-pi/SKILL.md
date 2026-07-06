@@ -47,10 +47,14 @@ Vérifier dans l'ordre :
 1. Message de bienvenue audible (TTS OK, sink Bluetooth OK)
 2. Log `Claude texte usage:` ou `TTS engine:` cohérent avec les providers .env
 3. Mot de réveil « مرافق » reconnu → réponse
-4. « شنو قدامي » → description Claude (log `Claude scene usage:`)
-5. « قرا ليا » → lecture OCR
+4. « شنو قدامي » → description Claude (log `Claude scene usage:`) — la capture
+   HQ ajoute ~0.5-1 s (switch_mode), c'est normal ; si le log montre
+   `Capture HQ échouée`, vérifier la config still (ou `HQ_CAPTURE_ENABLED=0`)
+5. « قرا ليا » → lecture OCR : tester avec une vraie lettre/notice — c'est le
+   cas qui profite du still haute résolution
 6. Coût : les lignes `usage: in=... out=...` restent dans les ordres de
-   grandeur attendus (~1-2k in / ~150 out par scène)
+   grandeur attendus (~1-2k in la scène 640px, ~2-3k in le still 1568px,
+   ~150 out par scène)
 
 ## Rappels matériels
 
