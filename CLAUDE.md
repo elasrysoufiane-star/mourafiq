@@ -70,6 +70,7 @@ mourafiq/
 │   ├── test_translations.py
 │   ├── test_intents.py             # inclut mot de réveil (contient_wake/retirer_wake)
 │   ├── test_providers.py           # routage AI/STT/TTS/vision/ocr + clés
+│   ├── test_fallbacks.py           # bascule gratuite (Groq/YOLO/Tesseract) si Claude en panne
 │   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
 └── logs/                           # Logs runtime (auto-créé)
@@ -198,7 +199,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 
 **Règles :**
 1. Mode par défaut = gratuit (`groq` + `edge` + `local`). Ne jamais changer les défauts dans le code.
-2. Si clé payante absente → message clair + fallback gratuit automatique, jamais d'exception non gérée.
+2. Si clé payante absente **OU appel Claude en échec après retries** → message clair + fallback gratuit automatique, jamais d'exception non gérée. `claude_client` lève `ClaudeError` (jamais de phrase d'erreur avalée) ; la couche providers attrape et bascule : chat→Groq, scène→YOLO local, OCR→Tesseract (`tests/test_fallbacks.py`).
 3. YOLO et GPS restent toujours locaux. Tesseract reste le fallback OCR (et le défaut) — Claude OCR est opt-in.
 4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
 5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire` / `read_text` / `lire_texte`) — rester testable sur Windows sans matériel.
@@ -269,6 +270,7 @@ python3 tests/test_translations.py
 python3 tests/test_intents.py
 python3 tests/test_providers.py
 python3 tests/test_memory.py        # mémoire conversation + nettoyage TTS
+python3 tests/test_fallbacks.py     # bascule gratuite si Claude en panne
 # ou
 pytest tests/ -v
 ```
@@ -323,6 +325,7 @@ pytest tests/ -v
 | Nettoyage TTS | `src/audio/text_clean.py` `clean_for_speech()` retire le Markdown (gras/listes/titres) avant synthèse — sinon edge-tts lit `*`/`-` littéralement. Appelé dans `parler()`. Consigne anti-Markdown ajoutée aux 3 prompts système (`_NO_MARKDOWN`) | `src/audio/text_clean.py`, `src/audio/speaker.py`, `src/ai/claude_client.py`, `tests/test_memory.py` |
 | Thinking off (2026-07-06) | `thinking={'type':'disabled'}` (`_THINKING_OFF`) explicite sur tous les `messages.create` — sur `claude-sonnet-5` le thinking adaptatif est ACTIF par défaut si omis → mangerait `max_tokens=150` + latence vocale. Nécessite un SDK anthropic récent sur le Pi (`pip install -U anthropic`) | `src/ai/claude_client.py` |
 | Capture HQ (2026-07-06) | `src/vision/camera.py` `capturer(hq=)` centralise les captures (camera_lock inclus). OCR + scène à la demande → still PLEINE RÉSOLUTION via `switch_mode_and_capture_array` (~0.5-1s) ; boucles YOLO/auto → flux 640×480. Fallback silencieux 640×480 si still indisponible. `HQ_CAPTURE_ENABLED=0` pour désactiver. Mettre `CLAUDE_IMG_MAX_PX=1568` dans .env pour en profiter | `src/vision/camera.py`, `src/core/app.py`, `src/core/state.py`, `src/ocr/reader.py`, `src/conversation/intents.py`, `src/vision/detector.py`, `config/settings.py` |
+| Fallbacks réels (2026-07-06) | Avant : `claude_client` avalait tout échec en phrase d'erreur → les fallbacks documentés étaient du code MORT (Claude en panne = assistant muet). Maintenant : `ClaudeError` levée après retries, la couche providers bascule — chat→Groq, scène→YOLO local, OCR→Tesseract. Un échec ne pollue pas la mémoire de conversation. Testé sans réseau ni SDK | `src/ai/claude_client.py`, `src/providers/ai.py`, `src/providers/vision_ai.py`, `tests/test_fallbacks.py` |
 
 **Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
 

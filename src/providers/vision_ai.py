@@ -44,7 +44,13 @@ def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = Fals
 
     if VISION_AI_PROVIDER == 'claude':
         if ANTHROPIC_API_KEY:
-            desc = _claude_scene(image, question, hq)
+            try:
+                desc = _claude_scene(image, question, hq)
+            except Exception as e:
+                # Claude en panne (Internet, quota, API) → les yeux restent
+                # vivants grâce au YOLO local, jamais de silence.
+                print(f'Claude vision indisponible ({e}) — fallback YOLO local')
+                desc = _local_scene(image)
         else:
             print('ANTHROPIC_API_KEY manquant — fallback vision locale (YOLO)')
             desc = _local_scene(image)

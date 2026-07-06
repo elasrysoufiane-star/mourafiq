@@ -17,12 +17,17 @@ from config.settings import (
 
 
 def get_ai_response(question: str) -> str:
-    """Envoie la question au provider AI configuré, retourne la réponse en darija."""
+    """Envoie la question au provider AI configuré, retourne la réponse en darija.
+    Claude indisponible (clé absente OU échec après retries) → fallback Groq :
+    l'assistant garde toujours la parole."""
     if AI_PROVIDER == 'claude':
         if not ANTHROPIC_API_KEY:
             print('ANTHROPIC_API_KEY manquant — fallback Groq')
         else:
-            return _claude_darija(question)
+            try:
+                return _claude_darija(question)
+            except Exception as e:
+                print(f'Claude indisponible ({e}) — fallback Groq')
     if AI_PROVIDER == 'openai':
         if not OPENAI_API_KEY:
             print('OPENAI_API_KEY manquant — fallback Groq')

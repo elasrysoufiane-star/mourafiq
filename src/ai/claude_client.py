@@ -18,6 +18,11 @@ Optimisation des tokens :
 Import du SDK `anthropic` en lazy (dans _get_client) → ce module reste
 importable sur Windows sans la lib ni la clé, pour les tests.
 3 tentatives avec backoff (429 / overloaded), comme groq_client.
+
+Échec définitif → ClaudeError (jamais une phrase d'erreur silencieuse) :
+la couche providers attrape et bascule sur le fallback gratuit (Groq pour
+le chat, YOLO pour la scène, Tesseract pour l'OCR) — l'assistant ne doit
+JAMAIS perdre la voix ou les yeux parce que Claude est indisponible.
 """
 import base64
 import io
@@ -88,6 +93,12 @@ _OCR_SYSTEM_PROMPT = (
 # 'disabled' est accepté par haiku-4-5 / sonnet-4-6 / sonnet-5 / opus-4-8.
 _THINKING_OFF = {'type': 'disabled'}
 
+
+class ClaudeError(Exception):
+    """Échec définitif d'un appel Claude (après retries). La couche providers
+    l'attrape pour basculer sur le fallback gratuit (Groq/YOLO/Tesseract)."""
+
+
 _client = None
 
 
@@ -142,7 +153,8 @@ def _retryable(e) -> bool:
 
 
 def claude_darija(question: str) -> str:
-    """Question texte → réponse darija courte. Message d'erreur si échec."""
+    """Question texte → réponse darija courte. ClaudeError si échec définitif
+    (l'appelant — providers.ai — bascule alors sur Groq)."""
     for tentative in range(3):
         try:
             resp = _get_client().messages.create(
@@ -164,14 +176,16 @@ def claude_darija(question: str) -> str:
                 time.sleep(attente)
             else:
                 print(f'Erreur Claude: {e}')
-                return 'عفوا ماقدرتش نفهم'
-    return 'عفوا ماقدرتش نفهم'
+                raise ClaudeError(str(e)) from e
+    raise ClaudeError('tentatives épuisées')
 
 
-def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur,
+def _vision_call(image, question, system_prompt, model, max_tokens, tag,
                  remember=False):
     """Appel multimodal générique (image + texte) avec retries. Usine commune
     à la description de scène et à la lecture OCR.
+    ClaudeError si échec définitif → la couche providers bascule sur le
+    fallback local (YOLO pour la scène, Tesseract pour l'OCR).
 
     remember=True → enregistre l'échange (question + réponse texte) dans la
     mémoire de conversation pour les questions de suivi. L'IMAGE n'est jamais
@@ -207,8 +221,8 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur,
                 time.sleep(attente)
             else:
                 print(f'Erreur Claude {tag}: {e}')
-                return erreur
-    return erreur
+                raise ClaudeError(str(e)) from e
+    raise ClaudeError('tentatives épuisées')
 
 
 def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None,
@@ -216,20 +230,22 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
     """Image (numpy RGB) + question → description de scène en darija.
     `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande).
     `remember` : True à la demande (suivi possible), False en boucle auto
-    sans micro (pas de conversation + évite un coût/contexte qui grossit)."""
+    sans micro (pas de conversation + évite un coût/contexte qui grossit).
+    ClaudeError si échec → providers.vision_ai bascule sur YOLO local."""
     return _vision_call(
         image, question, _VISION_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_MAX_TOKENS,
-        'scene', 'عفوا ماقدرتش نشوف مزيان', remember=remember,
+        'scene', remember=remember,
     )
 
 
 def claude_read_text(image, model: str = None) -> str:
     """Image (numpy RGB) → lecture + sens du texte en darija (OCR par VLM).
     Plus de tokens que la scène (peut contenir une lettre entière).
-    Mémorisé (remember=True) → suivi possible : « عاود », « شنو التاريخ؟ »."""
+    Mémorisé (remember=True) → suivi possible : « عاود », « شنو التاريخ؟ ».
+    ClaudeError si échec → providers.ocr bascule sur Tesseract local."""
     return _vision_call(
         image, 'قرا ليا هاد المكتوب', _OCR_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_OCR_MAX_TOKENS,
-        'ocr', 'عفوا ماقدرتش نقرا', remember=True,
+        'ocr', remember=True,
     )
