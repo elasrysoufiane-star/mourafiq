@@ -1,0 +1,125 @@
+"""
+Tests de la détection vocale (src/audio/listener.py) — logique pure, sans
+micro ni matériel. Fonctionne sur Windows, avec ou sans webrtcvad installé :
+  - découpe des chunks PCM en trames 20 ms pour webrtcvad
+  - fallback seuil de volume quand webrtcvad est absent
+  - plancher de volume anti bruit-de-confort quand webrtcvad est actif
+  - résolution de l'index micro (MIC_DEVICE_INDEX, -1 = défaut système)
+"""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.audio import listener
+from src.core import state
+
+
+def _avec(webrtc_ok, fonction):
+    """Exécute `fonction` avec _WEBRTC_OK forcé, puis restaure."""
+    ancien = listener._WEBRTC_OK
+    listener._WEBRTC_OK = webrtc_ok
+    try:
+        return fonction()
+    finally:
+        listener._WEBRTC_OK = ancien
+
+
+def test_frames_20ms_decoupe():
+    """2048 octets (chunk 1024 samples) → 3 trames complètes de 640 octets."""
+    frames = listener._frames_20ms(b'\x00' * 2048)
+    assert len(frames) == 3
+    assert all(len(f) == listener._FRAME_20MS_OCTETS for f in frames)
+
+
+def test_frames_20ms_trop_court():
+    """Moins d'une trame complète → liste vide (pas d'exception webrtcvad)."""
+    assert listener._frames_20ms(b'\x00' * 100) == []
+    assert listener._frames_20ms(b'') == []
+
+
+def test_est_voix_fallback_seuil():
+    """Sans webrtcvad → comportement historique : volume vs VOL_SEUIL."""
+    ancien_seuil = state.VOL_SEUIL
+    state.VOL_SEUIL = 200
+    try:
+        assert _avec(False, lambda: listener._est_voix(b'\x00' * 2048, 300)) is True
+        assert _avec(False, lambda: listener._est_voix(b'\x00' * 2048, 100)) is False
+    finally:
+        state.VOL_SEUIL = ancien_seuil
+
+
+def test_est_voix_plancher_webrtc():
+    """webrtcvad actif : volume sous le plancher → jamais de la voix
+    (bloque le bruit de confort HFP sans même consulter le VAD)."""
+    volume_bas = listener._VAD_VOL_PLANCHER  # <= plancher
+    assert _avec(True, lambda: listener._est_voix(b'\x00' * 2048, volume_bas)) is False
+
+
+def test_est_voix_chunk_court_webrtc():
+    """webrtcvad actif mais chunk sans trame complète → fallback seuil."""
+    ancien_seuil = state.VOL_SEUIL
+    state.VOL_SEUIL = 200
+    try:
+        assert _avec(True, lambda: listener._est_voix(b'\x00' * 100, 300)) is True
+        assert _avec(True, lambda: listener._est_voix(b'\x00' * 100, 180)) is False
+    finally:
+        state.VOL_SEUIL = ancien_seuil
+
+
+def test_est_voix_silence_webrtc():
+    """webrtcvad réellement installé : du silence pur n'est pas de la voix.
+    (Sauté silencieusement si la lib n'est pas installée — ex. Windows.)"""
+    if not listener._WEBRTC_OK:
+        return
+    assert listener._est_voix(b'\x00' * 2048, 500) is False
+
+
+def test_device_index_defaut_systeme():
+    """MIC_DEVICE_INDEX=-1 → None (PyAudio choisit le micro par défaut)."""
+    ancien = listener.MIC_DEVICE_INDEX
+    listener.MIC_DEVICE_INDEX = -1
+    try:
+        assert listener._device_index() is None
+    finally:
+        listener.MIC_DEVICE_INDEX = ancien
+
+
+def test_device_index_explicite():
+    ancien = listener.MIC_DEVICE_INDEX
+    listener.MIC_DEVICE_INDEX = 2
+    try:
+        assert listener._device_index() == 2
+    finally:
+        listener.MIC_DEVICE_INDEX = ancien
+
+
+def test_mic_device_index_config():
+    from config.settings import MIC_DEVICE_INDEX
+    assert isinstance(MIC_DEVICE_INDEX, int)
+
+
+if __name__ == '__main__':
+    tests = [
+        test_frames_20ms_decoupe,
+        test_frames_20ms_trop_court,
+        test_est_voix_fallback_seuil,
+        test_est_voix_plancher_webrtc,
+        test_est_voix_chunk_court_webrtc,
+        test_est_voix_silence_webrtc,
+        test_device_index_defaut_systeme,
+        test_device_index_explicite,
+        test_mic_device_index_config,
+    ]
+    passed = 0
+    failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f'  OK {t.__name__}')
+            passed += 1
+        except AssertionError as e:
+            print(f'  FAIL {t.__name__}: {e}')
+            failed += 1
+    print(f'\n{passed} passés, {failed} échoués')
+    sys.exit(1 if failed else 0)

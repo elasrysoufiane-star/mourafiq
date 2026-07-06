@@ -5,6 +5,10 @@ Contient aussi les utilitaires liés au micro :
   - suprimer_alsa() : supprime le spam ALSA/JACK au démarrage
   - calibrer_micro() : mesure le bruit ambiant et calcule VOL_SEUIL
 
+Détection de parole : webrtcvad si installé (vrai détecteur voix/bruit —
+crucial sur micro Bluetooth HFP dégradé), sinon fallback seuil de volume
+(comportement historique). Jamais d'exception si la lib manque.
+
 Timeout automatique après 8s sans voix pour éviter tout blocage infini.
 """
 import os
@@ -20,7 +24,17 @@ try:
 except ImportError:
     _PYAUDIO_OK = False
 
-from config.settings import AUDIO_WAV, TIMEOUT_ECOUTE
+try:
+    import webrtcvad
+    # Mode 2 : agressivité moyenne-haute — bon compromis sur micro HFP bruité
+    # (0 = permissif, 3 = très strict, risque de couper la parole douce).
+    _vad = webrtcvad.Vad(2)
+    _WEBRTC_OK = True
+except ImportError:
+    _vad = None
+    _WEBRTC_OK = False
+
+from config.settings import AUDIO_WAV, TIMEOUT_ECOUTE, MIC_DEVICE_INDEX
 from src.core import state
 
 # Anti-écho : purge ~0.4s de micro au début de chaque écoute, le temps que la
@@ -29,6 +43,43 @@ _PURGE_CHUNKS = int(0.4 * 16000 / 1024)
 # Filtre anti-bruit : minimum de parole (~0.4s) pour valider une capture.
 # En dessous = bruit / écho résiduel / hallucination Whisper → on ignore.
 _MIN_VOIX_CHUNKS = int(0.4 * 16000 / 1024)
+
+# webrtcvad exige des trames de 10/20/30 ms en PCM 16-bit mono.
+# 20 ms @ 16 kHz = 320 samples = 640 octets. Un chunk de 1024 samples
+# (2048 octets) donne 3 trames complètes (le reliquat de 64 samples est ignoré).
+_FRAME_20MS_OCTETS = 320 * 2
+# Plancher de volume quand webrtcvad est actif : évite les déclenchements sur
+# le bruit de confort / souffle HFP que le VAD peut classer « voix ».
+_VAD_VOL_PLANCHER = 150
+
+_vad_logge = False  # log unique du moteur VAD actif au premier appel
+
+
+def _frames_20ms(data: bytes) -> list:
+    """Découpe un chunk PCM en trames de 20 ms complètes pour webrtcvad."""
+    n = len(data) // _FRAME_20MS_OCTETS
+    return [data[i * _FRAME_20MS_OCTETS:(i + 1) * _FRAME_20MS_OCTETS]
+            for i in range(n)]
+
+
+def _est_voix(data: bytes, volume: float) -> bool:
+    """Le chunk contient-il de la parole ?
+    webrtcvad (majorité des trames voisées + plancher de volume) si installé,
+    sinon seuil de volume calibré (comportement historique)."""
+    if _WEBRTC_OK:
+        if volume <= _VAD_VOL_PLANCHER:
+            return False
+        frames = _frames_20ms(data)
+        if not frames:
+            return volume > state.VOL_SEUIL
+        voisees = sum(1 for f in frames if _vad.is_speech(f, 16000))
+        return voisees * 2 > len(frames)
+    return volume > state.VOL_SEUIL
+
+
+def _device_index():
+    """Index micro pour PyAudio. MIC_DEVICE_INDEX=-1 → défaut système (None)."""
+    return None if MIC_DEVICE_INDEX < 0 else MIC_DEVICE_INDEX
 
 
 # ── Utilitaires micro ─────────────────────────────────────────────────────────
@@ -60,7 +111,7 @@ def calibrer_micro() -> int:
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
                         rate=16000, input=True, frames_per_buffer=1024,
-                        input_device_index=1)
+                        input_device_index=_device_index())
     volumes = []
     for _ in range(30):
         data = stream.read(1024, exception_on_overflow=False)
@@ -89,6 +140,11 @@ def reconnaitre_voix() -> str:
         time.sleep(5)
         return ''
 
+    global _vad_logge
+    if not _vad_logge:
+        print(f'VAD: {"webrtcvad (mode 2)" if _WEBRTC_OK else "seuil de volume"}')
+        _vad_logge = True
+
     print('En attente de voix...')
 
     # Anti-écho : ne pas écouter pendant que l'assistant parle, puis laisser
@@ -99,7 +155,8 @@ def reconnaitre_voix() -> str:
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
-                        rate=16000, input=True, frames_per_buffer=1024, input_device_index=1)
+                        rate=16000, input=True, frames_per_buffer=1024,
+                        input_device_index=_device_index())
 
     # Purge le tampon micro (écho résiduel du haut-parleur capté au démarrage).
     for _ in range(_PURGE_CHUNKS):
@@ -116,7 +173,7 @@ def reconnaitre_voix() -> str:
         chunk  = np.frombuffer(data, dtype=np.int16)
         volume = np.abs(chunk).mean()
 
-        if volume > state.VOL_SEUIL:
+        if _est_voix(data, volume):
             # Voix active
             parole  = True
             voix   += 1

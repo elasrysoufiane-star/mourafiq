@@ -71,6 +71,7 @@ mourafiq/
 │   ├── test_intents.py             # inclut mot de réveil (contient_wake/retirer_wake)
 │   ├── test_providers.py           # routage AI/STT/TTS/vision/ocr + clés
 │   ├── test_fallbacks.py           # bascule gratuite (Groq/YOLO/Tesseract) si Claude en panne
+│   ├── test_listener.py            # VAD webrtcvad/seuil + index micro (sans matériel)
 │   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
 └── logs/                           # Logs runtime (auto-créé)
@@ -239,6 +240,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `HQ_CAPTURE_ENABLED` | `1` | Still pleine résolution capteur pour OCR + scène à la demande (`capturer(hq=True)`, switch_mode ~0.5-1s). 0 = tout en 640×480 |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
 | `AUTO_DESCRIBE_INTERVAL` | `5` | Description auto en mode sans micro (s ; 0 = désactivé). Claude si `VISION_AI_PROVIDER=claude` |
+| `MIC_DEVICE_INDEX` | `1` | Index micro PyAudio (1 = pipewire, défaut historique Pi). `-1` = micro par défaut système (à utiliser avec un micro USB) |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
 | `CONV_MEMORY_TURNS` | `6` | Tours (user+assistant) gardés en contexte Claude → questions de suivi. 0 = sans mémoire |
@@ -271,6 +273,7 @@ python3 tests/test_intents.py
 python3 tests/test_providers.py
 python3 tests/test_memory.py        # mémoire conversation + nettoyage TTS
 python3 tests/test_fallbacks.py     # bascule gratuite si Claude en panne
+python3 tests/test_listener.py      # VAD + index micro (sans matériel)
 # ou
 pytest tests/ -v
 ```
@@ -327,6 +330,7 @@ pytest tests/ -v
 | Capture HQ (2026-07-06) | `src/vision/camera.py` `capturer(hq=)` centralise les captures (camera_lock inclus). OCR + scène à la demande → still PLEINE RÉSOLUTION via `switch_mode_and_capture_array` (~0.5-1s) ; boucles YOLO/auto → flux 640×480. Fallback silencieux 640×480 si still indisponible. `HQ_CAPTURE_ENABLED=0` pour désactiver. Mettre `CLAUDE_IMG_MAX_PX=1568` dans .env pour en profiter | `src/vision/camera.py`, `src/core/app.py`, `src/core/state.py`, `src/ocr/reader.py`, `src/conversation/intents.py`, `src/vision/detector.py`, `config/settings.py` |
 | Fallbacks réels (2026-07-06) | Avant : `claude_client` avalait tout échec en phrase d'erreur → les fallbacks documentés étaient du code MORT (Claude en panne = assistant muet). Maintenant : `ClaudeError` levée après retries, la couche providers bascule — chat→Groq, scène→YOLO local, OCR→Tesseract. Un échec ne pollue pas la mémoire de conversation. Testé sans réseau ni SDK | `src/ai/claude_client.py`, `src/providers/ai.py`, `src/providers/vision_ai.py`, `tests/test_fallbacks.py` |
 | Scène locale hors-ligne (2026-07-06) | `_local_scene` phrase via le dictionnaire darija local (`_phraser_objets` : dédoublonnage + jointure « ، ») au lieu d'un appel Groq — instantané, marche SANS Internet (dernier maillon de secours des yeux), même voix que le thread vision. Groq uniquement pour les objets hors dictionnaire | `src/providers/vision_ai.py`, `tests/test_fallbacks.py` |
+| VAD webrtcvad (2026-07-06) | Détection de parole par webrtcvad (mode 2, trames 20 ms, majorité voisée + plancher volume 150) au lieu du seuil d'amplitude seul — filtre le bruit (trafic, chocs) sur micro Bluetooth HFP dégradé → moins de fausses captures/appels Whisper. Fallback automatique seuil de volume si lib absente. `MIC_DEVICE_INDEX` remplace l'index micro `1` codé en dur (`-1` = défaut système, prêt pour un futur micro USB). Sur le Pi : `pip install webrtcvad` | `src/audio/listener.py`, `config/settings.py`, `requirements.txt`, `tests/test_listener.py` |
 
 **Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
 
