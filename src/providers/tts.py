@@ -54,10 +54,13 @@ def _edge_synthesize(texte: str) -> None:
     if _EDGE_OK:
         try:
             asyncio.run(edge_tts.Communicate(texte, voice=EDGE_VOICE).save(AUDIO_MP3))
+            print(f'TTS: edge-tts ({EDGE_VOICE})')
             subprocess.run(['mpg123', '-q', AUDIO_MP3], check=False)
             return
         except Exception as e:
             print(f'edge-tts échoué ({e}) — fallback gTTS')
+    else:
+        print('edge-tts absent — fallback gTTS')
     _gtts_synthesize(texte)
 
 
@@ -65,6 +68,7 @@ def _gtts_synthesize(texte: str) -> None:
     if _GTTS_OK:
         try:
             gTTS(text=texte, lang='ar').save(AUDIO_MP3)
+            print('TTS: gTTS (ar)')
             subprocess.run(['mpg123', '-q', AUDIO_MP3], check=False)
             return
         except Exception as e:
@@ -78,6 +82,7 @@ def _elevenlabs_synthesize(texte: str) -> None:
     # Adam (pNInz6obpgDQGcFmaJgB) est utilisé par défaut si ELEVENLABS_VOICE_ID est vide.
     # Voir lab.elevenlabs.io/voice-library pour choisir une voix arabophone.
     voice_id = ELEVENLABS_VOICE_ID or 'pNInz6obpgDQGcFmaJgB'
+    print('TTS: ElevenLabs (eleven_multilingual_v2)')
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
     response = client.text_to_speech.convert(
         text=texte,

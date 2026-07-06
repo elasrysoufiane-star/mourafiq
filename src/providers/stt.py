@@ -10,7 +10,12 @@ Le fichier WAV doit déjà exister (écrit par reconnaitre_voix() dans listener.
 """
 import time
 
-from config.settings import STT_PROVIDER, OPENAI_API_KEY, AUDIO_WAV
+from config.settings import STT_PROVIDER, STT_MODEL, OPENAI_API_KEY, AUDIO_WAV
+
+# Biais de langue uniquement — une phrase courte et neutre en darija.
+# NE PAS mettre de liste de mots-clés ici : sur audio faible, Whisper recrache
+# le contenu du prompt (hallucination), ce qui fabrique de fausses commandes.
+_DARIJA_PROMPT = 'تسجيل صوتي بالدارجة المغربية.'
 
 
 def transcribe() -> str:
@@ -29,9 +34,11 @@ def _groq_transcribe() -> str:
         try:
             with open(AUDIO_WAV, 'rb') as f:
                 result = state.groq_client.audio.transcriptions.create(
-                    model='whisper-large-v3-turbo',
+                    model=STT_MODEL,
                     file=f,
-                    language='ar'
+                    language='ar',
+                    prompt=_DARIJA_PROMPT,
+                    temperature=0.0,
                 )
             texte = result.text.strip()
             print(f'Compris: {texte}')

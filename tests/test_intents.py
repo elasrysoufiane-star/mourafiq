@@ -19,6 +19,9 @@ from src.conversation.intents import (
     KEYWORDS_HELP,
     KEYWORDS_STOP,
     KEYWORDS_NAVIGATE,
+    KEYWORDS_WAKE,
+    contient_wake,
+    retirer_wake,
 )
 
 
@@ -130,6 +133,20 @@ def test_intention_help():
 def test_intention_msaada():
     assert _detecter_intention('مساعدة') == 'help'
 
+# ── Tests mot de réveil ───────────────────────────────────────────────────────
+
+def test_wake_detecte():
+    assert contient_wake('مرافق شنو قدامي')
+
+def test_wake_absent():
+    assert not contient_wake('شنو قدامي')
+
+def test_wake_retire_garde_commande():
+    assert retirer_wake('مرافق شنو قدامي') == 'شنو قدامي'
+
+def test_wake_seul_donne_vide():
+    assert retirer_wake('مرافق') == ''
+
 
 if __name__ == '__main__':
     tests = [
@@ -158,6 +175,10 @@ if __name__ == '__main__':
         test_intention_free_unknown,
         test_intention_help,
         test_intention_msaada,
+        test_wake_detecte,
+        test_wake_absent,
+        test_wake_retire_garde_commande,
+        test_wake_seul_donne_vide,
     ]
     passed = 0
     failed = 0

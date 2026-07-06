@@ -15,9 +15,14 @@ conversation_active = threading.Event()
 
 # ── Objets matériels (initialisés par app.init()) ─────────────────────────────
 camera      = None   # Picamera2
+camera_still_cfg = None  # config still HQ (OCR / scène à la demande) — None = indisponible
 model       = None   # ultralytics.YOLO
 groq_client = None   # groq.Groq
 gps_serial  = None   # serial.Serial
+
+# Micro disponible ? Mis à jour par app.init(). False → mode vision seul
+# (le thread conversation n'est pas lancé, pas de boucle de timeouts inutile).
+mic_ok = False
 
 # Seuil volume micro — calibré au démarrage par calibrer_micro()
 VOL_SEUIL = 200

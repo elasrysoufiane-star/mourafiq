@@ -23,6 +23,13 @@ except ImportError:
 from config.settings import AUDIO_WAV, TIMEOUT_ECOUTE
 from src.core import state
 
+# Anti-écho : purge ~0.4s de micro au début de chaque écoute, le temps que la
+# queue audio du haut-parleur (latence Bluetooth) ne soit plus captée par le micro.
+_PURGE_CHUNKS = int(0.4 * 16000 / 1024)
+# Filtre anti-bruit : minimum de parole (~0.4s) pour valider une capture.
+# En dessous = bruit / écho résiduel / hallucination Whisper → on ignore.
+_MIN_VOIX_CHUNKS = int(0.4 * 16000 / 1024)
+
 
 # ── Utilitaires micro ─────────────────────────────────────────────────────────
 
@@ -52,7 +59,8 @@ def calibrer_micro() -> int:
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
-                        rate=16000, input=True, frames_per_buffer=1024)
+                        rate=16000, input=True, frames_per_buffer=1024,
+                        input_device_index=1)
     volumes = []
     for _ in range(30):
         data = stream.read(1024, exception_on_overflow=False)
@@ -82,14 +90,25 @@ def reconnaitre_voix() -> str:
         return ''
 
     print('En attente de voix...')
+
+    # Anti-écho : ne pas écouter pendant que l'assistant parle, puis laisser
+    # retomber la queue audio (latence Bluetooth) avant d'ouvrir le micro.
+    while state.conversation_active.is_set():
+        time.sleep(0.05)
+
     with suprimer_alsa():
         p      = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=1,
-                        rate=16000, input=True, frames_per_buffer=1024)
+                        rate=16000, input=True, frames_per_buffer=1024, input_device_index=1)
+
+    # Purge le tampon micro (écho résiduel du haut-parleur capté au démarrage).
+    for _ in range(_PURGE_CHUNKS):
+        stream.read(1024, exception_on_overflow=False)
 
     frames  = []
     silence = 0
     parole  = False
+    voix    = 0  # nombre de chunks réellement vocaux (pour le filtre anti-bruit)
     timeout = 0  # chunks sans voix (reset à chaque détection vocale)
 
     while True:
@@ -100,6 +119,7 @@ def reconnaitre_voix() -> str:
         if volume > state.VOL_SEUIL:
             # Voix active
             parole  = True
+            voix   += 1
             silence = 0
             timeout = 0
             frames.append(data)
@@ -121,6 +141,11 @@ def reconnaitre_voix() -> str:
     p.terminate()
 
     if not frames:
+        return ''
+
+    # Filtre anti-bruit : capture trop courte → bruit / écho / hallucination.
+    if voix < _MIN_VOIX_CHUNKS:
+        print('Capture trop courte — ignorée (bruit/écho)')
         return ''
 
     # Sauvegarde WAV
