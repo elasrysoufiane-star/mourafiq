@@ -115,6 +115,7 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 | Feature | Modèle défaut | Prix /1M (in/out) |
 |---------|---------------|-------------------|
 | Description de scène (VLM) | `claude-haiku-4-5` | $1 / $5 |
+| Qualité recommandée (à la demande) | `claude-sonnet-5` | $2 / $10 (intro jusqu'au 31/08/2026, puis $3/$15) |
 | Qualité max (option) | `claude-opus-4-8` | $5 / $25 |
 
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). Vide = fallback local/Groq automatique.
@@ -317,10 +318,22 @@ pytest tests/ -v
 | `OCR_PROVIDER` | Routage OCR `local`/`claude` (défaut local) + tests | `config/settings.py`, `tests/test_providers.py` |
 | Mémoire conversation | `src/core/memory.py` : historique roulant TEXTE (`CONV_MEMORY_TURNS` tours) PARTAGÉ chat+vision+OCR → questions de suivi (« وزيد على اليسار؟ », « عاود », « زيدني تفاصيل »). Préfixé à chaque appel Claude ; images jamais stockées ; boucle auto sans micro (`hq=False`) ne mémorise pas (`remember=hq`). Pairage strict user→assistant | `src/core/memory.py`, `src/ai/claude_client.py`, `src/providers/vision_ai.py`, `config/settings.py`, `tests/test_memory.py` |
 | Nettoyage TTS | `src/audio/text_clean.py` `clean_for_speech()` retire le Markdown (gras/listes/titres) avant synthèse — sinon edge-tts lit `*`/`-` littéralement. Appelé dans `parler()`. Consigne anti-Markdown ajoutée aux 3 prompts système (`_NO_MARKDOWN`) | `src/audio/text_clean.py`, `src/audio/speaker.py`, `src/ai/claude_client.py`, `tests/test_memory.py` |
+| Thinking off (2026-07-06) | `thinking={'type':'disabled'}` (`_THINKING_OFF`) explicite sur tous les `messages.create` — sur `claude-sonnet-5` le thinking adaptatif est ACTIF par défaut si omis → mangerait `max_tokens=150` + latence vocale. Nécessite un SDK anthropic récent sur le Pi (`pip install -U anthropic`) | `src/ai/claude_client.py` |
 
-**Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-4-6`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus.
+**Activation (`.env`) :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
 
-**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-4-6`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). Coût vision : ~0.001 $/scène (Haiku 768px) → ~0.02-0.03 $/scène (Opus 1568px), à la demande seulement.
+**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-5`), `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. ⚠️ `CLAUDE_IMG_MAX_PX` > 640 est sans effet : la caméra capture en 640×480 (`thumbnail` ne fait que réduire) — la vraie limite qualité OCR est la résolution caméra (voir `.claude/memory/decisions.md`).
+
+## Dossier `.claude/` (agents, skills, mémoire projet)
+
+| Ressource | Rôle |
+|-----------|------|
+| `.claude/agents/darija-reviewer.md` | Relecture darija (naturalité + adéquation TTS/accessibilité) |
+| `.claude/agents/pi-debugger.md` | Diagnostic runtime Pi (audio/BT, caméra, GPS, erreurs API) |
+| `.claude/skills/run-tests/` | Lancer la suite de tests sur Windows sans matériel |
+| `.claude/skills/deploy-pi/` | Checklist déploiement Windows → Raspberry Pi |
+| `.claude/skills/tune-claude/` | Profils coût/qualité Claude (eco / mixte / max) via `.env` |
+| `.claude/memory/decisions.md` | Journal des décisions (le POURQUOI) — **à consulter avant de re-trancher un choix de modèle/architecture** |
 
 ## Maintenance de ce fichier (économie de tokens)
 

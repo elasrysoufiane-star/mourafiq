@@ -82,6 +82,12 @@ _OCR_SYSTEM_PROMPT = (
     + _NO_MARKDOWN
 )
 
+# Thinking désactivé explicitement : sur claude-sonnet-5 le thinking adaptatif
+# est ACTIF par défaut quand le paramètre est omis — il consommerait le budget
+# max_tokens (réponse parlée courte) et ajouterait de la latence vocale.
+# 'disabled' est accepté par haiku-4-5 / sonnet-4-6 / sonnet-5 / opus-4-8.
+_THINKING_OFF = {'type': 'disabled'}
+
 _client = None
 
 
@@ -142,6 +148,7 @@ def claude_darija(question: str) -> str:
             resp = _get_client().messages.create(
                 model=CLAUDE_TEXT_MODEL,
                 max_tokens=CLAUDE_MAX_TOKENS,
+                thinking=_THINKING_OFF,
                 system=_system_block(_CHAT_SYSTEM_PROMPT),
                 messages=memory.get_history() + [{'role': 'user', 'content': question}],
             )
@@ -176,6 +183,7 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag, erreur,
             resp = _get_client().messages.create(
                 model=model,
                 max_tokens=max_tokens,
+                thinking=_THINKING_OFF,
                 system=_system_block(system_prompt),
                 messages=memory.get_history() + [{'role': 'user', 'content': [
                     {'type': 'image', 'source': {
