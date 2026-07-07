@@ -240,13 +240,14 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
     )
 
 
-def claude_read_text(image, model: str = None) -> str:
+def claude_read_text(image, model: str = None, remember: bool = True) -> str:
     """Image (numpy RGB) → lecture + sens du texte en darija (OCR par VLM).
     Plus de tokens que la scène (peut contenir une lettre entière).
-    Mémorisé (remember=True) → suivi possible : « عاود », « شنو التاريخ؟ ».
+    `remember` : True à la demande (suivi possible : « عاود », « شنو التاريخ؟ »),
+    False en boucle AutoScene (lecture de fond, pas un tour de dialogue).
     ClaudeError si échec → providers.ocr bascule sur Tesseract local."""
     return _vision_call(
         image, 'قرا ليا هاد المكتوب', _OCR_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_OCR_MAX_TOKENS,
-        'ocr', remember=True,
+        'ocr', remember=remember,
     )

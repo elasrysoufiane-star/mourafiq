@@ -21,7 +21,7 @@ Tout se règle dans `.env` — ne JAMAIS changer les défauts gratuits dans le c
 CLAUDE_TEXT_MODEL=claude-sonnet-5
 CLAUDE_VISION_MODEL=claude-haiku-4-5
 CLAUDE_VISION_MODEL_HQ=claude-sonnet-5
-AUTO_DESCRIBE_INTERVAL=5
+AUTO_DESCRIBE_INTERVAL=2
 ```
 ≈ $0.002/question vocale, ≈ $0.003/scène HQ. Latence bonne.
 
@@ -47,10 +47,12 @@ AUTO_DESCRIBE_INTERVAL=8
 - **`thinking`** : sur claude-sonnet-5 le thinking adaptatif est actif par
   défaut si le paramètre est omis → le code le désactive explicitement
   (`_THINKING_OFF` dans `src/ai/claude_client.py`). Ne pas retirer.
-- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** — la boucle AutoScene
-  tourne TOUJOURS (avec ou sans micro) : 5 s ≈ 720 appels/h en continu, en
-  plus des appels à la demande si micro. Monter l'intervalle (ou VISION_AI_PROVIDER=local)
-  pour limiter la facture si un micro est aussi actif.
+- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (défaut `2`) — la
+  boucle AutoScene tourne TOUJOURS (avec ou sans micro) et appelle **scène ET
+  OCR** à chaque cycle : 2 s ≈ 1800 appels/h par provider actif (jusqu'à ×2 si
+  `VISION_AI_PROVIDER=claude` ET `OCR_PROVIDER=claude` en même temps), en plus
+  des appels à la demande si micro. Monter l'intervalle, ou repasser
+  `VISION_AI_PROVIDER`/`OCR_PROVIDER` en `local` pour limiter la facture.
 - **Image** : l'OCR et la scène à la demande capturent un still PLEINE
   RÉSOLUTION (`HQ_CAPTURE_ENABLED=1`, `src/vision/camera.py`), réduit à
   `CLAUDE_IMG_MAX_PX` avant envoi → régler `CLAUDE_IMG_MAX_PX=1568` (lisible,

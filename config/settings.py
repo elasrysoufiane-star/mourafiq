@@ -72,12 +72,13 @@ CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 HQ_CAPTURE_ENABLED = os.environ.get('HQ_CAPTURE_ENABLED', '1') not in ('0', 'false', 'False', '')
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
-# Description automatique de scène, TOUJOURS active (avec ou sans micro, que
-# l'utilisateur parle ou non) — tourne en parallèle de la conversation.
-# Toutes les N secondes : capture → describe_scene() → parle. 0 = désactivé.
-# Pour utiliser Claude ici : VISION_AI_PROVIDER=claude + ANTHROPIC_API_KEY.
-# Attention coût si provider=claude (≈720 appels/h à 5s) — voir CLAUDE.md.
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '5'))
+# Description automatique de scène + lecture OCR, TOUJOURS active (avec ou
+# sans micro, que l'utilisateur parle ou non) — tourne en parallèle de la
+# conversation. Toutes les N secondes : capture → describe_scene() +
+# read_text() → parle. 0 = désactivé.
+# Pour utiliser Claude ici : VISION_AI_PROVIDER=claude/OCR_PROVIDER=claude + ANTHROPIC_API_KEY.
+# Attention coût si provider=claude (≈1800 appels/h à 2s, × 2 avec l'OCR) — voir CLAUDE.md.
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '2'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 # Surchargeable via .env (cohérent avec le reste de la config).

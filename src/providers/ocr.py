@@ -12,18 +12,22 @@ Règles (cohérentes avec les autres providers) :
     fallback automatique vers Tesseract local — jamais d'exception non gérée.
   • read_text() retourne TOUJOURS une phrase darija prête à être lue à voix haute
     (y compris « ماكاين حتى نص » quand il n'y a rien). L'appelant n'a qu'à parler.
+  • remember=False (boucle AutoScene) : ne mémorise pas — lecture de fond
+    répétée toutes les AUTO_DESCRIBE_INTERVAL s, pas un tour de dialogue.
 
 Imports lazy (pytesseract/PIL/claude_client) — testable sur Windows sans matériel.
 """
 from config.settings import OCR_PROVIDER, ANTHROPIC_API_KEY
 
 
-def read_text(image) -> str:
-    """Lit le texte d'une image (numpy RGB) → phrase darija à lire à voix haute."""
+def read_text(image, remember: bool = True) -> str:
+    """Lit le texte d'une image (numpy RGB) → phrase darija à lire à voix haute.
+    `remember` : True à la demande (« قرا ليا »), False dans la boucle AutoScene
+    (évite de polluer la mémoire de conversation avec une lecture de fond)."""
     if OCR_PROVIDER == 'claude':
         if ANTHROPIC_API_KEY:
             try:
-                return _claude_ocr(image)
+                return _claude_ocr(image, remember)
             except Exception as e:
                 print(f'OCR Claude échec ({e}) — fallback Tesseract')
         else:
@@ -31,9 +35,9 @@ def read_text(image) -> str:
     return _local_ocr(image)
 
 
-def _claude_ocr(image) -> str:
+def _claude_ocr(image, remember: bool) -> str:
     from src.ai.claude_client import claude_read_text
-    return claude_read_text(image)
+    return claude_read_text(image, remember=remember)
 
 
 def _local_ocr(image) -> str:
