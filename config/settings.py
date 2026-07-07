@@ -31,11 +31,6 @@ OCR_PROVIDER = os.environ.get('OCR_PROVIDER', 'local')  # local | claude
 # STT_MODEL=whisper-large-v3 (un peu plus lent, meilleure transcription darija).
 STT_MODEL = os.environ.get('STT_MODEL', 'whisper-large-v3-turbo')
 
-# Provider de compréhension de scène (VLM, appelé UNIQUEMENT à la demande).
-# 'local' = YOLO + Groq (gratuit, défaut). 'claude' = Claude multimodal (payant).
-# Fallback automatique vers 'local' si ANTHROPIC_API_KEY absente.
-VISION_AI_PROVIDER = os.environ.get('VISION_AI_PROVIDER', 'local')  # local | claude
-
 OLLAMA_URL   = os.environ.get('OLLAMA_URL',   'http://127.0.0.1:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'mistral')
 
@@ -66,18 +61,19 @@ CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
 CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 # Capture still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et la
-# scène à la demande, via switch_mode (~0.5-1s, ponctuel). La boucle YOLO garde
-# le flux 640×480. 0 = désactivé (tout en 640×480, comportement d'avant).
+# scène à la demande, via switch_mode (~0.5-1s, ponctuel). La boucle AutoScene
+# garde le flux 640×480. 0 = désactivé (tout en 640×480, comportement d'avant).
 # Monter CLAUDE_IMG_MAX_PX (.env) pour que le still profite vraiment au VLM.
 HQ_CAPTURE_ENABLED = os.environ.get('HQ_CAPTURE_ENABLED', '1') not in ('0', 'false', 'False', '')
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
-# Description automatique de scène + lecture OCR, TOUJOURS active (avec ou
-# sans micro, que l'utilisateur parle ou non) — tourne en parallèle de la
-# conversation. Toutes les N secondes : capture → describe_scene() +
+# Description automatique de scène (Claude) + lecture OCR, TOUJOURS active
+# (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
+# de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# Pour utiliser Claude ici : VISION_AI_PROVIDER=claude/OCR_PROVIDER=claude + ANTHROPIC_API_KEY.
-# Attention coût si provider=claude (≈1800 appels/h à 2s, × 2 avec l'OCR) — voir CLAUDE.md.
+# La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
+# Attention coût (≈1800 appels/h à 2s pour la scène, × 2 si OCR_PROVIDER=claude
+# aussi) — voir CLAUDE.md.
 AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '2'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
@@ -95,14 +91,6 @@ GEOCODE_TIMEOUT = float(os.environ.get('GEOCODE_TIMEOUT', '5'))
 # ── Chemins fichiers audio temporaires ───────────────────────────────────────
 AUDIO_MP3 = str(BASE_DIR / 'temp' / 'audio.mp3')
 AUDIO_WAV = str(BASE_DIR / 'temp' / 'audio.wav')
-
-# ── Modèle YOLO ───────────────────────────────────────────────────────────────
-MODEL_PATH = str(BASE_DIR / 'models' / 'yolov8n.pt')
-
-# ── Détection d'objets ────────────────────────────────────────────────────────
-# Seuil de confiance YOLO — abaissé à 0.50 pour mieux détecter les objets
-# Tester 0.45 si des objets réels sont encore trop souvent ratés
-CONF_SEUIL = 0.50
 
 # ── Text-to-Speech ────────────────────────────────────────────────────────────
 # Voix edge-tts marocaine (homme). Alternatives :
@@ -132,7 +120,7 @@ WAKE_FOLLOWUP_WINDOW = float(os.environ.get('WAKE_FOLLOWUP_WINDOW', '15'))
 # Nombre de tours (échange user+assistant) gardés en contexte et renvoyés à
 # Claude → permet une vraie discussion avec questions de suivi : « وزيد على
 # اليسار؟ », « عاود », « زيدني تفاصيل », sans tout réexpliquer. Partagée entre le
-# chat et la vision À LA DEMANDE (la boucle auto sans micro ne l'alimente pas).
+# chat et la vision À LA DEMANDE (la boucle AutoScene de fond ne l'alimente pas).
 # 0 = sans mémoire (chaque tour isolé, comportement précédent). Plus haut = plus
 # de contexte mais plus de tokens par appel.
 CONV_MEMORY_TURNS = int(os.environ.get('CONV_MEMORY_TURNS', '6'))

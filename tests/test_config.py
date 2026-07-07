@@ -9,26 +9,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import (
-    CONF_SEUIL,
     EDGE_VOICE,
     TIMEOUT_ECOUTE,
     GPS_BAUD,
     BASE_DIR,
     AUDIO_MP3,
     AUDIO_WAV,
-    MODEL_PATH,
     HQ_CAPTURE_ENABLED,
 )
-
-
-def test_conf_seuil_range():
-    """CONF_SEUIL doit être entre 0 et 1 (seuil de confiance YOLO)."""
-    assert 0 < CONF_SEUIL < 1, f"CONF_SEUIL={CONF_SEUIL} hors de ]0,1["
-
-
-def test_conf_seuil_valeur():
-    """CONF_SEUIL ≤ 0.60 pour une bonne détection."""
-    assert CONF_SEUIL <= 0.60, f"CONF_SEUIL={CONF_SEUIL} trop élevé (max recommandé: 0.60)"
 
 
 def test_edge_voice_arabic():
@@ -64,10 +52,9 @@ def test_base_dir_exists():
 
 
 def test_paths_in_project():
-    """Les chemins audio et modèle doivent être dans le projet."""
+    """Les chemins audio doivent être dans le projet."""
     assert str(BASE_DIR) in AUDIO_MP3
     assert str(BASE_DIR) in AUDIO_WAV
-    assert str(BASE_DIR) in MODEL_PATH
 
 
 def test_audio_mp3_extension():
@@ -91,8 +78,6 @@ def test_camera_module_importable():
 
 if __name__ == '__main__':
     tests = [
-        test_conf_seuil_range,
-        test_conf_seuil_valeur,
         test_edge_voice_arabic,
         test_edge_voice_moroccan,
         test_timeout_ecoute_positive,

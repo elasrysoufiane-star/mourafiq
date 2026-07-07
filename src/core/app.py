@@ -1,20 +1,20 @@
 """
 Initialisation du matériel et boucle principale.
-Les imports matériels (YOLO, Picamera2, Groq) sont chargés à l'intérieur
-de init() pour ne pas bloquer les tests sur Windows.
+Les imports matériels (Picamera2, Groq) sont chargés à l'intérieur de init()
+pour ne pas bloquer les tests sur Windows.
 """
 import time
 import threading
 import subprocess
 
 from config.settings import (
-    GROQ_API_KEY, MODEL_PATH, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
+    GROQ_API_KEY, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
     HQ_CAPTURE_ENABLED,
 )
 from src.core import state
 from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
-from src.vision.detector import mode_vision, mode_auto_scene
+from src.vision.detector import mode_auto_scene
 from src.conversation.commands import mode_conversation
 from src.gps.location import init_gps, position_actuelle
 
@@ -40,11 +40,6 @@ def init():
     (BASE_DIR / 'temp').mkdir(exist_ok=True)
     (BASE_DIR / 'logs').mkdir(exist_ok=True)
 
-    # YOLO — import lazy pour ne pas bloquer les tests Windows
-    print('Chargement YOLO...')
-    from ultralytics import YOLO
-    state.model = YOLO(MODEL_PATH)
-
     # Caméra PiCamera2 — import lazy
     print('Chargement caméra...')
     from picamera2 import Picamera2
@@ -55,7 +50,7 @@ def init():
     state.camera.configure(cam_cfg)
     # Config still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et
     # la scène à la demande — utilisée ponctuellement via switch_mode dans
-    # src/vision/camera.py. La boucle YOLO garde le flux 640×480 rapide.
+    # src/vision/camera.py. La boucle AutoScene garde le flux 640×480 rapide.
     if HQ_CAPTURE_ENABLED:
         try:
             state.camera_still_cfg = state.camera.create_still_configuration(
@@ -91,7 +86,7 @@ def init():
         print(f'Micro détecté: {_info["name"]}')
     except Exception:
         state.mic_ok = False
-        print('AVERTISSEMENT: Aucun micro détecté → mode vision seul (pas d\'écoute).')
+        print('AVERTISSEMENT: Aucun micro détecté → pas d\'écoute (AutoScene reste actif).')
     _p.terminate()
 
     # Calibration bruit ambiant (2s) → calcule VOL_SEUIL.
@@ -118,9 +113,7 @@ def main():
         else:
             parler('ماقدرتش نلقى موقعك دابا، خرج برا باش يتقى الإشارة')
 
-    t1 = threading.Thread(target=mode_vision, name='Vision', daemon=True)
-    t1.start()
-    actifs = ['Vision']
+    actifs = []
 
     # AutoScene tourne TOUJOURS (que l'utilisateur parle ou non) — description
     # détaillée périodique de la caméra par la voix, indépendante du micro.
@@ -136,10 +129,9 @@ def main():
         t2.start()
         actifs.append('Conversation')
     else:
-        print('AVERTISSEMENT: pas de micro détecté — écoute désactivée, '
-              'seule la description automatique de la scène est active.')
+        print('AVERTISSEMENT: pas de micro détecté — écoute désactivée.')
 
-    print(' + '.join(actifs) + ' actifs !')
+    print((' + '.join(actifs) if actifs else 'Aucun mode') + ' actif(s) !')
 
     try:
         while True:

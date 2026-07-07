@@ -53,3 +53,30 @@ pas un token de plus.
 640×480) ; échec still → fallback silencieux flux vidéo, jamais d'exception.
 **À valider sur le Pi** : latence réelle du switch_mode et couleurs du still
 (même format RGB888 que le flux — devrait être identique).
+
+## 2026-07-07 — YOLO retiré, vision 100% Claude
+
+**Décision** : suppression complète de YOLO — `mode_vision()` (boucle de
+détection continue), `_local_scene()`/`_phraser_objets()` (fallback scène
+hors-ligne), `src/vision/translations.py` (dict COCO→darija), `CONF_SEUIL`,
+`MODEL_PATH`, `models/yolov8n.pt`, dépendance `ultralytics`. `describe_scene()`
+n'appelle plus que Claude ; `VISION_AI_PROVIDER` a disparu (plus qu'un seul
+chemin possible). Si Claude échoue ou `ANTHROPIC_API_KEY` est absente :
+message vocal clair d'indisponibilité (`_INDISPONIBLE` dans
+`src/providers/vision_ai.py`) — jamais de silence, mais plus de détection
+locale de secours.
+
+**Pourquoi** : demande explicite du porteur de projet — la détection YOLO en
+conditions réelles (rue, faible luminosité, mouvement) était jugée trop faible
+comparée à la description riche de Claude, et maintenir deux chemins de
+description (YOLO simpliste + Claude détaillé) ajoutait de la complexité pour
+un bénéfice net négatif. Conséquence assumée : **la description de scène
+n'est plus gratuite** — elle nécessite `ANTHROPIC_API_KEY` (voir README.md,
+section « Mode gratuit »). OCR et GPS restent inchangés (Tesseract toujours
+disponible en local pour l'OCR).
+
+**Revenir dessus si** : besoin d'un mode 100% gratuit/hors-ligne pour la
+vision — il faudrait réintroduire une détection locale (YOLO ou autre) ;
+consulter `git log` avant ce commit pour l'implémentation précédente
+(`_local_scene`, `traductions`) si on veut repartir de là plutôt que
+recommencer de zéro.

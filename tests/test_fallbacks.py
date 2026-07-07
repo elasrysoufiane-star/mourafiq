@@ -1,13 +1,13 @@
 """
 Tests des fallbacks providers quand Claude est indisponible (panne, quota,
-pas d'Internet). Règle projet n°2 : jamais d'exception non gérée, toujours
-une bascule vers l'outil gratuit — l'assistant d'un malvoyant ne doit JAMAIS
-devenir silencieux.
+pas d'Internet). Règle projet n°2 : jamais d'exception non gérée — l'assistant
+d'un malvoyant ne doit JAMAIS devenir silencieux, même sans bascule locale.
 
 Chaîne testée :
   claude_client  → lève ClaudeError après retries (au lieu d'avaler l'erreur)
   providers.ai   → attrape → fallback Groq
-  providers.vision_ai → attrape → fallback YOLO local
+  providers.vision_ai → attrape → message vocal clair (YOLO retiré, plus de
+                        détection locale de secours)
   providers.ocr  → attrape → fallback Tesseract
 
 Fonctionne sur Windows sans matériel, sans SDK anthropic, sans clé API.
@@ -97,50 +97,36 @@ def test_ai_fallback_groq():
          providers_ai._claude_darija, providers_ai._groq_darija) = anciens
 
 
-def test_vision_fallback_local():
-    """VISION_AI_PROVIDER=claude + Claude en panne → description YOLO locale."""
-    anciens = (providers_vision.VISION_AI_PROVIDER,
-               providers_vision.ANTHROPIC_API_KEY,
-               providers_vision._claude_scene, providers_vision._local_scene,
+def test_vision_fallback_message_clair():
+    """Claude en panne → message vocal clair d'indisponibilité (YOLO retiré,
+    plus de détection locale de secours), jamais d'exception."""
+    anciens = (providers_vision.ANTHROPIC_API_KEY,
+               providers_vision._claude_scene,
                providers_vision._last_desc, providers_vision._last_time)
     def _casse(image, question, hq):
         raise ClaudeError('panne (test)')
-    providers_vision.VISION_AI_PROVIDER = 'claude'
     providers_vision.ANTHROPIC_API_KEY = 'sk-ant-test'
     providers_vision._claude_scene = _casse
-    providers_vision._local_scene = lambda image: 'وصف محلي'
     providers_vision._last_desc = ''
     try:
-        assert providers_vision.describe_scene(object(), hq=True) == 'وصف محلي'
+        assert providers_vision.describe_scene(object(), hq=True) == providers_vision._INDISPONIBLE
     finally:
-        (providers_vision.VISION_AI_PROVIDER,
-         providers_vision.ANTHROPIC_API_KEY,
-         providers_vision._claude_scene, providers_vision._local_scene,
+        (providers_vision.ANTHROPIC_API_KEY,
+         providers_vision._claude_scene,
          providers_vision._last_desc, providers_vision._last_time) = anciens
 
 
-def test_phraser_objets_hors_ligne():
-    """Objets connus → phrases du dictionnaire local, SANS appel réseau."""
-    from src.vision.translations import traductions
-    resultat = providers_vision._phraser_objets(['person', 'car', 'person'])
-    assert traductions['person'] in resultat
-    assert traductions['car'] in resultat
-    # Dédoublonné : 'person' détecté 2 fois → une seule phrase
-    assert resultat.count(traductions['person']) == 1
-
-
-def test_phraser_objets_vide():
-    assert providers_vision._phraser_objets([]) == 'الطريق واضحة ماكاين والو'
-
-
-def test_phraser_objets_inconnus_via_groq():
-    """Objets hors dictionnaire → reformulation via get_ai_response."""
-    ancien = providers_vision.get_ai_response
-    providers_vision.get_ai_response = lambda q: 'جواب من غروق'
+def test_vision_sans_cle_message_clair():
+    """Pas de ANTHROPIC_API_KEY → message clair immédiat, sans appel Claude."""
+    anciens = (providers_vision.ANTHROPIC_API_KEY,
+               providers_vision._last_desc, providers_vision._last_time)
+    providers_vision.ANTHROPIC_API_KEY = ''
+    providers_vision._last_desc = ''
     try:
-        assert providers_vision._phraser_objets(['zebra']) == 'جواب من غروق'
+        assert providers_vision.describe_scene(object(), hq=True) == providers_vision._INDISPONIBLE
     finally:
-        providers_vision.get_ai_response = ancien
+        (providers_vision.ANTHROPIC_API_KEY,
+         providers_vision._last_desc, providers_vision._last_time) = anciens
 
 
 def test_ocr_fallback_tesseract():
@@ -166,10 +152,8 @@ if __name__ == '__main__':
         test_claude_scene_leve_claude_error,
         test_claude_ocr_leve_claude_error,
         test_ai_fallback_groq,
-        test_vision_fallback_local,
-        test_phraser_objets_hors_ligne,
-        test_phraser_objets_vide,
-        test_phraser_objets_inconnus_via_groq,
+        test_vision_fallback_message_clair,
+        test_vision_sans_cle_message_clair,
         test_ocr_fallback_tesseract,
     ]
     passed = 0

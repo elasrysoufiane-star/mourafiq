@@ -1,36 +1,29 @@
 """
-Provider Vision-Langage (VLM) — description de scène à la demande.
-Routage selon VISION_AI_PROVIDER dans config/settings.py.
-
-Providers supportés :
-  local  — YOLO + Groq (gratuit, défaut)
-  claude — Claude multimodal (payant, compréhension de scène riche)
+Provider Vision-Langage (VLM) — description de scène à la demande et dans la
+boucle automatique. 100% Claude : YOLO a été retiré (détection locale par
+mots-clés jugée trop faible pour un usage réel) — plus de fallback hors-ligne.
 
 Règles :
-  • Appelé UNIQUEMENT sur intention vocale (jamais en continu) → 0 token au repos.
-  • Fallback automatique vers 'local' si ANTHROPIC_API_KEY absente — jamais d'exception.
   • Cooldown : réutilise la dernière description si rappelé en < VISION_COOLDOWN s
     (anti double-déclenchement STT + économie de tokens).
-  • YOLO/Tesseract/GPS restent toujours locaux — pas de cloud pour ces composants.
+  • Si ANTHROPIC_API_KEY absente OU appel Claude en échec (Internet, quota...) :
+    message vocal clair d'indisponibilité — jamais de silence, jamais d'exception
+    non gérée, mais plus de détection locale de secours (voir .claude/memory/decisions.md).
 
 Import claude_client en lazy (dans _claude_scene) — testable Windows sans clé.
 """
 import time
 
-from config.settings import (
-    VISION_AI_PROVIDER, ANTHROPIC_API_KEY, VISION_COOLDOWN, CONF_SEUIL,
-    CLAUDE_VISION_MODEL, CLAUDE_VISION_MODEL_HQ,
-)
-from src.core import state
-from src.providers.ai import get_ai_response
-from src.vision.translations import traductions
+from config.settings import ANTHROPIC_API_KEY, VISION_COOLDOWN, CLAUDE_VISION_MODEL, CLAUDE_VISION_MODEL_HQ
 
 _last_time = 0.0
 _last_desc = ''
 
+_INDISPONIBLE = 'ماقدرتش نشوف دابا، تأكد من الأنترنت ديالك'
+
 
 def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = False) -> str:
-    """Décrit la scène via le provider configuré. Retourne une phrase darija.
+    """Décrit la scène via Claude. Retourne une phrase darija.
 
     hq=True  → appel À LA DEMANDE (question vocale) : modèle haute qualité
                (CLAUDE_VISION_MODEL_HQ, ex. Sonnet) + on ignore le cache (réponse
@@ -43,20 +36,15 @@ def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = Fals
     if not hq and _last_desc and (now - _last_time) < VISION_COOLDOWN:
         return _last_desc
 
-    if VISION_AI_PROVIDER == 'claude':
-        if ANTHROPIC_API_KEY:
-            try:
-                desc = _claude_scene(image, question, hq)
-            except Exception as e:
-                # Claude en panne (Internet, quota, API) → les yeux restent
-                # vivants grâce au YOLO local, jamais de silence.
-                print(f'Claude vision indisponible ({e}) — fallback YOLO local')
-                desc = _local_scene(image)
-        else:
-            print('ANTHROPIC_API_KEY manquant — fallback vision locale (YOLO)')
-            desc = _local_scene(image)
+    if not ANTHROPIC_API_KEY:
+        print('ANTHROPIC_API_KEY manquant — vision indisponible (pas de fallback local)')
+        desc = _INDISPONIBLE
     else:
-        desc = _local_scene(image)
+        try:
+            desc = _claude_scene(image, question, hq)
+        except Exception as e:
+            print(f'Claude vision indisponible ({e}) — pas de fallback local')
+            desc = _INDISPONIBLE
 
     _last_time, _last_desc = time.time(), desc
     return desc
@@ -69,31 +57,3 @@ def _claude_scene(image, question: str, hq: bool) -> str:
     # auto de fond (narration continue, pas un tour de dialogue) → pas de
     # mémoire, pour éviter un contexte qui grossit en continu.
     return claude_describe_scene(image, question, model=model, remember=hq)
-
-
-def _local_scene(image) -> str:
-    """Fallback gratuit : YOLO local → phrase darija.
-    Priorité au dictionnaire local (hors-ligne, instantané, même voix que le
-    thread vision) ; Groq uniquement pour les objets hors dictionnaire."""
-    r = state.model(image, verbose=False)[0]
-    objets = [
-        r.names[int(box.cls)]
-        for box in r.boxes[:3]
-        if float(box.conf) > CONF_SEUIL
-    ]
-    return _phraser_objets(objets)
-
-
-def _phraser_objets(objets: list) -> str:
-    """Liste de classes YOLO → phrase darija prête à parler.
-    100% local si les objets sont dans le dictionnaire (marche SANS Internet —
-    c'est le dernier maillon de secours des yeux) ; sinon reformulation Groq."""
-    if not objets:
-        return 'الطريق واضحة ماكاين والو'
-    # dict.fromkeys : dédoublonne en gardant l'ordre (3 boxes 'person' → 1 phrase)
-    phrases = [traductions[o] for o in dict.fromkeys(objets) if o in traductions]
-    if phrases:
-        return '، '.join(phrases)
-    return get_ai_response(
-        f'الأشياء أمام المستخدم: {", ".join(objets)} قل ذلك بالدارجة'
-    )

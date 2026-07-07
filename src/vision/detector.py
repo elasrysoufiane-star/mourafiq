@@ -1,58 +1,22 @@
 """
-Thread vision — boucle YOLO continue.
-Détecte les objets avec YOLOv8n et annonce chaque nouveau objet en darija.
-Se met en pause uniquement pendant la sortie audio (conversation_active).
+Thread vision — description automatique continue (scène + OCR), 100% Claude.
+YOLO a été retiré (détection locale trop faible pour un usage réel) : plus de
+détection d'objets par mots-clés, plus de fallback local hors-ligne. describe_scene()
+et read_text() parlent clairement de l'indisponibilité si Claude ne répond pas
+(voir src/providers/vision_ai.py, src/providers/ocr.py) — jamais de silence.
 """
 import time
 
-from config.settings import CONF_SEUIL, AUTO_DESCRIBE_INTERVAL
+from config.settings import AUTO_DESCRIBE_INTERVAL
 from src.core import state
 from src.audio.speaker import parler
 from src.vision.camera import capturer
-from src.vision.translations import traductions
 
 # Phrases « rien à lire » communes aux deux providers OCR — Tesseract renvoie
 # l'une des deux exactement, Claude une variante qui commence pareil (voir
 # _local_ocr et _OCR_SYSTEM_PROMPT dans claude_client.py). Sert à ne PAS
 # annoncer ces phrases creuses à chaque cycle de la boucle auto (bruyant).
 _OCR_SANS_RESULTAT = ('ماكاين حتى نص', 'ماقدرتش نقرا')
-
-
-def mode_vision() -> None:
-    """
-    Boucle principale du thread vision.
-    Capture → YOLO → annonce si objet nouveau avec confiance > CONF_SEUIL.
-    Pause de 3s entre deux annonces pour ne pas saturer l'utilisateur.
-    """
-    dernier = ''
-    print('Mode Vision démarré...')
-
-    while True:
-        try:
-            # Pause seulement pendant la sortie audio
-            if state.conversation_active.is_set():
-                time.sleep(0.5)
-                continue
-
-            img = capturer()  # flux 640×480 — rapide, suffisant pour YOLO
-
-            results = state.model(img, verbose=False)
-            for r in results:
-                for box in r.boxes:
-                    obj  = r.names[int(box.cls)]
-                    conf = float(box.conf)
-
-                    if conf > CONF_SEUIL and obj in traductions and obj != dernier:
-                        print(f'Vision: {obj} {conf:.0%}')
-                        parler(traductions[obj])
-                        dernier = obj
-                        time.sleep(3)
-
-            time.sleep(0.1)  # limite le CPU entre les frames
-
-        except Exception as e:
-            print(f'Erreur vision: {e}')
-            time.sleep(1)
 
 
 def mode_auto_scene() -> None:
@@ -66,8 +30,9 @@ def mode_auto_scene() -> None:
     `audio_lock`).
 
     Deux appels par cycle, sur la MÊME capture (pas de second accès caméra) :
-      • describe_scene() — scène/obstacles, routé par VISION_AI_PROVIDER
-        ('claude' + ANTHROPIC_API_KEY → VLM riche, sinon YOLO+Groq gratuit)
+      • describe_scene() — scène/obstacles par Claude VLM. Si Claude échoue
+        (pas d'Internet, quota, clé absente) : message vocal clair
+        d'indisponibilité, PLUS de détection locale de secours (YOLO retiré).
       • read_text()      — texte visible (panneau, étiquette...), routé par
         OCR_PROVIDER ('claude' → VLM, sinon Tesseract local) ; les réponses
         creuses (_OCR_SANS_RESULTAT : aucun texte / Tesseract indisponible)

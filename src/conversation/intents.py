@@ -48,7 +48,8 @@ def process_command(commande: str) -> bool:
         reponse = position_actuelle()
         parler(reponse if reponse else 'ماقدرتش نلقى موقعك دابا')
 
-    # Description de la scène à la demande — VLM (Claude) ou fallback YOLO local.
+    # Description de la scène à la demande — Claude VLM (message vocal clair
+    # d'indisponibilité si Claude échoue, pas de fallback local, YOLO retiré).
     # La question vocale est transmise telle quelle au VLM (ex. « واش كاين شي حد؟ »).
     # hq=True → modèle haute qualité (Sonnet) car c'est une vraie question posée.
     elif any(m in commande for m in KEYWORDS_VISION):

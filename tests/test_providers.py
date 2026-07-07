@@ -11,14 +11,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import (
     DEMO_MODE,
-    AI_PROVIDER, STT_PROVIDER, TTS_PROVIDER, VISION_AI_PROVIDER, OCR_PROVIDER,
+    AI_PROVIDER, STT_PROVIDER, TTS_PROVIDER, OCR_PROVIDER,
     ELEVENLABS_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
 )
 
 _VALID_AI     = {'groq', 'openai', 'claude', 'ollama'}
 _VALID_STT    = {'groq', 'openai'}
 _VALID_TTS    = {'edge', 'gtts', 'elevenlabs'}
-_VALID_VISION = {'local', 'claude'}
 _VALID_OCR    = {'local', 'claude'}
 
 
@@ -46,12 +45,6 @@ def test_tts_provider_type():
 def test_tts_provider_valid():
     assert TTS_PROVIDER in _VALID_TTS, f"TTS_PROVIDER='{TTS_PROVIDER}' invalide (options: {_VALID_TTS})"
 
-def test_vision_provider_type():
-    assert isinstance(VISION_AI_PROVIDER, str)
-
-def test_vision_provider_valid():
-    assert VISION_AI_PROVIDER in _VALID_VISION, f"VISION_AI_PROVIDER='{VISION_AI_PROVIDER}' invalide (options: {_VALID_VISION})"
-
 def test_ocr_provider_type():
     assert isinstance(OCR_PROVIDER, str)
 
@@ -64,7 +57,6 @@ def test_default_free_mode():
         assert AI_PROVIDER        == 'groq',  "AI_PROVIDER par défaut doit être 'groq'"
         assert STT_PROVIDER       == 'groq',  "STT_PROVIDER par défaut doit être 'groq'"
         assert TTS_PROVIDER       == 'edge',  "TTS_PROVIDER par défaut doit être 'edge'"
-        assert VISION_AI_PROVIDER == 'local', "VISION_AI_PROVIDER par défaut doit être 'local'"
         assert OCR_PROVIDER       == 'local', "OCR_PROVIDER par défaut doit être 'local'"
 
 def test_elevenlabs_key_is_string():
@@ -114,8 +106,6 @@ if __name__ == '__main__':
         test_stt_provider_valid,
         test_tts_provider_type,
         test_tts_provider_valid,
-        test_vision_provider_type,
-        test_vision_provider_valid,
         test_ocr_provider_type,
         test_ocr_provider_valid,
         test_default_free_mode,

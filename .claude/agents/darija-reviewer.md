@@ -1,6 +1,6 @@
 ---
 name: darija-reviewer
-description: Relit et améliore les textes en darija marocaine du projet — prompts système Claude (src/ai/claude_client.py), phrases parlées (traductions YOLO, intents, messages d'accueil). Utiliser après toute modification de texte darija, ou pour auditer la naturalité et l'adéquation accessibilité.
+description: Relit et améliore les textes en darija marocaine du projet — prompts système Claude (src/ai/claude_client.py), phrases parlées (intents, messages d'accueil, messages d'indisponibilité). Utiliser après toute modification de texte darija, ou pour auditer la naturalité et l'adéquation accessibilité.
 tools: Read, Grep, Glob
 model: sonnet
 ---
@@ -17,7 +17,7 @@ Contexte produit essentiel :
 
 Où vivent les textes darija :
 - `src/ai/claude_client.py` — 3 prompts système (_VISION_SYSTEM_PROMPT, _CHAT_SYSTEM_PROMPT, _OCR_SYSTEM_PROMPT)
-- `src/vision/translations.py` — dictionnaire YOLO COCO → phrases darija
+- `src/providers/vision_ai.py` — message d'indisponibilité vision (_INDISPONIBLE, si Claude échoue — pas de fallback local, YOLO retiré)
 - `src/conversation/intents.py` — mots-clés de commande + réponses
 - `src/core/app.py` — message de bienvenue
 

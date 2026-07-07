@@ -49,10 +49,11 @@ AUTO_DESCRIBE_INTERVAL=8
   (`_THINKING_OFF` dans `src/ai/claude_client.py`). Ne pas retirer.
 - **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (défaut `2`) — la
   boucle AutoScene tourne TOUJOURS (avec ou sans micro) et appelle **scène ET
-  OCR** à chaque cycle : 2 s ≈ 1800 appels/h par provider actif (jusqu'à ×2 si
-  `VISION_AI_PROVIDER=claude` ET `OCR_PROVIDER=claude` en même temps), en plus
-  des appels à la demande si micro. Monter l'intervalle, ou repasser
-  `VISION_AI_PROVIDER`/`OCR_PROVIDER` en `local` pour limiter la facture.
+  OCR** à chaque cycle : 2 s ≈ 1800 appels/h pour la scène (toujours Claude,
+  YOLO retiré — pas d'option gratuite), jusqu'à ×2 si `OCR_PROVIDER=claude`
+  aussi, en plus des appels à la demande si micro. Monter l'intervalle, ou
+  repasser `OCR_PROVIDER=local` pour limiter la facture (la scène, elle, reste
+  toujours payante).
 - **Image** : l'OCR et la scène à la demande capturent un still PLEINE
   RÉSOLUTION (`HQ_CAPTURE_ENABLED=1`, `src/vision/camera.py`), réduit à
   `CLAUDE_IMG_MAX_PX` avant envoi → régler `CLAUDE_IMG_MAX_PX=1568` (lisible,

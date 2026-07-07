@@ -1,8 +1,8 @@
 """
 Capture caméra centralisée — deux qualités :
 
-  capturer()          → frame 640×480 du flux vidéo (rapide — boucle YOLO,
-                        description auto continue)
+  capturer()          → frame 640×480 du flux vidéo (rapide — boucle
+                        AutoScene, description auto continue)
   capturer(hq=True)   → still pleine résolution capteur via switch_mode
                         (~0.5-1s), réservé à l'OCR et à la scène à la demande :
                         lire une lettre ou une notice exige plus de pixels

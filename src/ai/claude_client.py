@@ -20,9 +20,10 @@ importable sur Windows sans la lib ni la clé, pour les tests.
 3 tentatives avec backoff (429 / overloaded), comme groq_client.
 
 Échec définitif → ClaudeError (jamais une phrase d'erreur silencieuse) :
-la couche providers attrape et bascule sur le fallback gratuit (Groq pour
-le chat, YOLO pour la scène, Tesseract pour l'OCR) — l'assistant ne doit
-JAMAIS perdre la voix ou les yeux parce que Claude est indisponible.
+la couche providers attrape et bascule — Groq pour le chat, Tesseract pour
+l'OCR, message vocal clair pour la scène (pas de fallback local, YOLO
+retiré) — l'assistant ne doit JAMAIS perdre la voix parce que Claude est
+indisponible.
 """
 import base64
 import io
@@ -96,7 +97,8 @@ _THINKING_OFF = {'type': 'disabled'}
 
 class ClaudeError(Exception):
     """Échec définitif d'un appel Claude (après retries). La couche providers
-    l'attrape pour basculer sur le fallback gratuit (Groq/YOLO/Tesseract)."""
+    l'attrape pour basculer (Groq pour le chat, Tesseract pour l'OCR, message
+    vocal clair pour la scène — pas de fallback local, YOLO retiré)."""
 
 
 _client = None
@@ -184,8 +186,8 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag,
                  remember=False):
     """Appel multimodal générique (image + texte) avec retries. Usine commune
     à la description de scène et à la lecture OCR.
-    ClaudeError si échec définitif → la couche providers bascule sur le
-    fallback local (YOLO pour la scène, Tesseract pour l'OCR).
+    ClaudeError si échec définitif → la couche providers bascule (message vocal
+    clair pour la scène, pas de fallback local — YOLO retiré ; Tesseract pour l'OCR).
 
     remember=True → enregistre l'échange (question + réponse texte) dans la
     mémoire de conversation pour les questions de suivi. L'IMAGE n'est jamais
@@ -232,7 +234,8 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
     `remember` : True à la demande (suivi possible), False en boucle auto de
     fond (narration continue, pas un tour de dialogue — évite un contexte
     qui grossit en continu).
-    ClaudeError si échec → providers.vision_ai bascule sur YOLO local."""
+    ClaudeError si échec → providers.vision_ai renvoie un message vocal clair
+    d'indisponibilité (pas de fallback local, YOLO retiré)."""
     return _vision_call(
         image, question, _VISION_SYSTEM_PROMPT,
         model or CLAUDE_VISION_MODEL, CLAUDE_MAX_TOKENS,

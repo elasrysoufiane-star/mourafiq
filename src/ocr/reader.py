@@ -5,7 +5,7 @@ et lit le résultat à voix haute.
 Le routage Tesseract local / Claude vision est dans src/providers/ocr.py
 (configurer OCR_PROVIDER dans .env). Ici : capture + sortie audio uniquement.
 Capture en HAUTE RÉSOLUTION (hq=True) : lire une lettre ou une notice exige
-plus de pixels que le flux 640×480 de la boucle YOLO.
+plus de pixels que le flux 640×480 de la boucle AutoScene.
 """
 from src.audio.speaker import parler
 from src.vision.camera import capturer

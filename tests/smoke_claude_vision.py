@@ -1,6 +1,6 @@
 """
 Smoke-test du chemin Claude vision EN ISOLATION (avant de lancer toute l'app).
-Teste l'encodage image + l'appel Claude + le log d'usage, sans threads ni YOLO.
+Teste l'encodage image + l'appel Claude + le log d'usage, sans threads.
 
 Usage :
   # Sur le Pi (capture une frame depuis la PiCamera2) :

@@ -7,7 +7,6 @@
 # picamera2 est installé via apt sur Raspberry Pi OS, pas via pip :
 #   sudo apt install python3-picamera2
 
-ultralytics
 pytesseract
 pyaudio
 webrtcvad
