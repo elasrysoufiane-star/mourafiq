@@ -80,3 +80,29 @@ vision — il faudrait réintroduire une détection locale (YOLO ou autre) ;
 consulter `git log` avant ce commit pour l'implémentation précédente
 (`_local_scene`, `traductions`) si on veut repartir de là plutôt que
 recommencer de zéro.
+
+## 2026-07-07 — Timeout explicite (15s) + max_retries=0 sur le client anthropic
+
+**Décision** : `anthropic.Anthropic(api_key=..., timeout=15.0, max_retries=0)`
+dans `_get_client()` (`src/ai/claude_client.py`).
+
+**Pourquoi** : symptôme rapporté juste après le retrait de YOLO — AutoScene
+tournait (thread démarré, log « Mode description auto démarré ») mais ne
+décrivait plus rien du tout, ni à l'oral ni dans les logs, pendant un long
+moment, sans la moindre erreur affichée. Cause probable : le SDK anthropic
+timeout par défaut à ~10 MIN (httpx) ET retry automatiquement en interne
+(silencieusement) AVANT même de laisser remonter l'erreur à notre propre
+boucle de retry (`claude_darija`/`_vision_call`, 3 tentatives avec backoff
+loggé). Sur un réseau Pi dégradé, ces deux couches de retry se cumulent →
+silence total pendant potentiellement plusieurs minutes par cycle, avant
+qu'une erreur (donc un fallback parlé) ne sorte enfin.
+
+**Effet** : un appel qui traîne échoue maintenant en 15s max, et c'est NOTRE
+retry (visible : « Quota Claude, attente Ns... » / « Erreur Claude: ... ») qui
+gère la suite → le message vocal d'indisponibilité (`_INDISPONIBLE`) arrive
+en quelques dizaines de secondes maximum au lieu de potentiellement plusieurs
+minutes silencieuses.
+
+**Revenir dessus si** : 15s s'avère trop court pour de vraies réponses (ex.
+`claude-opus-4-8` sur une image HQ) — monter `_TIMEOUT_S` plutôt que
+réactiver `max_retries` du SDK (qui recrée le problème de silence).

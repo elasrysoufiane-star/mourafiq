@@ -103,13 +103,25 @@ class ClaudeError(Exception):
 
 _client = None
 
+# Timeout par requête. Le SDK anthropic défaut à 10 MIN (httpx) — sur un réseau
+# Pi dégradé/instable, un appel qui traîne bloque tout le cycle AutoScene
+# (silence total : ni description, ni erreur, ni fallback) pendant potentiellement
+# plusieurs minutes. 15s est largement suffisant pour un appel VLM/texte normal.
+_TIMEOUT_S = 15.0
+
 
 def _get_client():
-    """Crée (une fois) le client anthropic. Import lazy → testable sans la lib."""
+    """Crée (une fois) le client anthropic. Import lazy → testable sans la lib.
+    max_retries=0 : les retries sont gérés explicitement dans claude_darija() /
+    _vision_call() (avec log + backoff visibles) — laisser le SDK retry en plus
+    en silence multiplierait le temps avant qu'une erreur ou un fallback ne
+    s'affiche/se parle."""
     global _client
     if _client is None:
         import anthropic
-        _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        _client = anthropic.Anthropic(
+            api_key=ANTHROPIC_API_KEY, timeout=_TIMEOUT_S, max_retries=0,
+        )
     return _client
 
 
