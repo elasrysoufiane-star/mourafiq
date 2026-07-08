@@ -38,6 +38,7 @@ mourafiq/
 ├── src/
 │   ├── core/
 │   │   ├── state.py                # Locks, events, objets matériels partagés
+│   │   ├── logging_setup.py        # setup_logging() — tee stdout/stderr → logs/*.log daté
 │   │   └── app.py                  # init() + main() — hardware lazy-loaded
 │   ├── audio/
 │   │   ├── speaker.py              # parler(), suprimer_alsa(), calibrer_micro()
@@ -67,6 +68,7 @@ mourafiq/
 │   ├── test_providers.py           # routage AI/STT/TTS/ocr + clés
 │   ├── test_fallbacks.py           # bascule (Groq/Tesseract/edge-tts) ou message clair si Claude/Azure en panne
 │   ├── test_listener.py            # VAD webrtcvad/seuil + index micro (sans matériel)
+│   ├── test_logging.py             # tee stdout→fichier daté, horodatage, thread-safe, purge
 │   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
 └── logs/                           # Logs runtime (auto-créé)
@@ -77,6 +79,7 @@ mourafiq/
 ```
 config.settings ──────────────────────────────┐ (stdlib + dotenv seulement)
 src.core.state ───────────────────────────────┤ (threading seulement)
+src.core.logging_setup ───────────────────────┤ (stdlib seulement — tee stdout/stderr → fichier)
 src.vision.camera ◄── core.state              │ (capture 640×480 / still HQ)
 src.core.memory ──────────────────────────────┤ (config + threading — historique conversation)
 src.audio.text_clean ─────────────────────────┤ (re seulement — nettoyage Markdown TTS)
@@ -94,7 +97,7 @@ src.ocr.reader       ◄── audio.speaker, vision.camera  (providers.ocr lazy
 src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
 src.conversation.intents ◄── audio.speaker, providers.ai, providers.vision_ai, vision.camera, ocr.reader, gps.location
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
-src.core.app         ◄── config, core.state, audio.speaker, audio.listener,
+src.core.app         ◄── config, core.state, core.logging_setup, audio.speaker, audio.listener,
                           vision.detector, conversation.commands, gps.location
 main.py              ◄── core.app
 ```
@@ -179,6 +182,7 @@ trouvé) sont tues côté `mode_auto_scene()` pour ne pas les répéter à chaqu
 
 ## Key Functions
 
+- **`setup_logging(base_dir, to_file, keep_files)`** in `src/core/logging_setup.py` — installe un tee sur `sys.stdout`/`stderr` (appelé au tout début de `main()`) : chaque `print()` de tous les threads part à l'écran ET dans `logs/mourafiq_AAAAMMJJ_HHMMSS.log`, horodaté + nom du thread, thread-safe (verrou), flush par ligne. `LOG_TO_FILE=0` désactive. Purge les vieux logs (`LOG_KEEP_FILES`)
 - **`parler(texte)`** in `src/audio/speaker.py` — sets `conversation_active`, délègue à `providers.tts.synthesize()`
 - **`reconnaitre_voix()`** in `src/audio/listener.py` — PyAudio VAD → WAV → `providers.stt.transcribe()`; **timeout 8s**
 - **`get_ai_response(question)`** in `src/providers/ai.py` — routage vers `groq_darija()` / `claude_darija()` / openai
@@ -256,6 +260,8 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
 | `CONV_MEMORY_TURNS` | `6` | Tours (user+assistant) gardés en contexte Claude → questions de suivi. 0 = sans mémoire |
+| `LOG_TO_FILE` | `1` | Capture toute la sortie console dans `logs/mourafiq_*.log` (horodaté + thread). 0 = console seule |
+| `LOG_KEEP_FILES` | `20` | Nombre de fichiers log gardés (les plus anciens supprimés au démarrage → carte SD du Pi) |
 
 ## Imports matériels — lazy loading
 
@@ -285,6 +291,7 @@ python3 tests/test_providers.py
 python3 tests/test_memory.py        # mémoire conversation + nettoyage TTS
 python3 tests/test_fallbacks.py     # bascule/message clair si Claude en panne
 python3 tests/test_listener.py      # VAD + index micro (sans matériel)
+python3 tests/test_logging.py       # tee stdout→fichier daté, thread-safe, purge
 # ou
 pytest tests/ -v
 ```
@@ -347,6 +354,7 @@ pytest tests/ -v
 | YOLO retiré, vision 100% Claude (2026-07-07) | Demande explicite : YOLO jugé trop faible en conditions réelles. Suppression de `mode_vision()` (thread YOLO continu), `_local_scene()`/`_phraser_objets()` (fallback hors-ligne), `src/vision/translations.py`, `CONF_SEUIL`, `MODEL_PATH`, `models/yolov8n.pt`, dépendance `ultralytics`, `VISION_AI_PROVIDER` (supprimée — plus qu'un seul chemin). `describe_scene()` appelle toujours Claude ; si échec/clé absente → message vocal clair (`_INDISPONIBLE`), jamais de silence mais plus de détection locale de secours. Conséquence : la description de scène **n'est plus gratuite**. Voir `.claude/memory/decisions.md` pour le détail | `src/vision/detector.py`, `src/providers/vision_ai.py`, `src/core/app.py`, `src/core/state.py`, `config/settings.py`, `requirements.txt`, `tests/test_fallbacks.py`, `tests/test_providers.py`, `tests/test_config.py` |
 | Timeout client anthropic (2026-07-07) | `anthropic.Anthropic(..., timeout=15.0, max_retries=0)` — le SDK timeoutait à ~10 MIN par défaut et retryait en plus en interne (silencieusement), en amont de notre propre boucle de retry loggée. Sur réseau Pi dégradé : silence total (aucune description, aucune erreur) pendant potentiellement plusieurs minutes après le retrait de YOLO (plus de fallback local pour combler ce trou). Maintenant : échec rapide (15s) → notre retry/fallback (loggé, parlé) prend le relais en quelques dizaines de secondes max | `src/ai/claude_client.py` |
 | Défauts qualité + TTS Azure (2026-07-08) | Demande explicite (présentation projet, « meilleur résultat », coût accepté) : les défauts du code passent en qualité max, le `.env` ne contient plus QUE les clés API. Nouveau provider `TTS_PROVIDER=azure` (Azure Speech REST officiel via stdlib urllib, même voix `ar-MA-JamalNeural` qu'edge-tts, tier F0 gratuit 500K car./mois, fallback edge sans clé ou en panne). Défauts : `AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `STT_MODEL=whisper-large-v3`, `CLAUDE_TEXT_MODEL`/`_HQ=claude-sonnet-5`, `CLAUDE_IMG_MAX_PX=1568`, `AUTO_DESCRIBE_INTERVAL=6`. Bascule auto vers le gratuit testée (`test_tts_azure_*`, `test_default_quality_mode`) | `src/providers/tts.py`, `config/settings.py`, `.env.example`, `tests/test_providers.py`, `tests/test_fallbacks.py` |
+| Système de logs runtime (2026-07-08) | Avant : tout partait en `print()` sur la console et disparaissait à la fermeture (rien dans `logs/`). Maintenant `setup_logging()` (appelé au début de `main()`) installe un tee sur `sys.stdout`/`stderr` : chaque `print()` de TOUS les threads est affiché ET écrit dans `logs/mourafiq_AAAAMMJJ_HHMMSS.log`, horodaté `[HH:MM:SS ThreadName]`, thread-safe (verrou → lignes entières malgré AutoScene+Conversation concurrents), flush par ligne (rien perdu sur Ctrl+C). Purge auto des vieux logs (`LOG_KEEP_FILES`, défaut 20). `LOG_TO_FILE=0` = console seule. Pour copier un log au debug : `logs/` (ignoré par git). stdlib pure, testé (`tests/test_logging.py`) | `src/core/logging_setup.py`, `src/core/app.py`, `config/settings.py`, `tests/test_logging.py`, `tests/test_config.py` |
 
 **Activation : rien à activer** — les défauts du code SONT le mode qualité depuis 2026-07-08. `.env` = clés uniquement : `GROQ_API_KEY` (obligatoire — STT + démarrage), `ANTHROPIC_API_KEY` (obligatoire pour la vision — scène/OCR/conversation), `AZURE_SPEECH_KEY` (optionnel — TTS officiel, vide = edge-tts). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (6s ≈ 600 appels scène/h, ×2 avec OCR claude) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max : `.claude/skills/tune-claude/SKILL.md`.
 

@@ -9,9 +9,10 @@ import subprocess
 
 from config.settings import (
     GROQ_API_KEY, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
-    HQ_CAPTURE_ENABLED,
+    HQ_CAPTURE_ENABLED, LOG_TO_FILE, LOG_KEEP_FILES,
 )
 from src.core import state
+from src.core.logging_setup import setup_logging
 from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
 from src.vision.detector import mode_auto_scene
@@ -101,6 +102,12 @@ def init():
 
 def main():
     """Point d'entrée principal — lance les threads et attend Ctrl+C."""
+    # Installer le tee stdout/stderr → fichier log AVANT tout print() → toute la
+    # session (init comprise) est capturée. Console inchangée à l'écran.
+    chemin_log = setup_logging(BASE_DIR, to_file=LOG_TO_FILE, keep_files=LOG_KEEP_FILES)
+    if chemin_log:
+        print(f'Logs → {chemin_log}')
+
     init()
 
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '

@@ -102,6 +102,15 @@ GPS_READ_TIMEOUT = float(os.environ.get('GPS_READ_TIMEOUT', '3'))
 GEOCODE_ENABLED = os.environ.get('GEOCODE_ENABLED', '1') not in ('0', 'false', 'False', '')
 GEOCODE_TIMEOUT = float(os.environ.get('GEOCODE_TIMEOUT', '5'))
 
+# ── Logs runtime ──────────────────────────────────────────────────────────────
+# Capture TOUTE la sortie console (tous les print(), tous les threads) dans
+# logs/mourafiq_AAAAMMJJ_HHMMSS.log, horodatée + nom du thread — pour déboguer
+# (latences, timeouts API, ordre des threads) et copier le log facilement.
+# LOG_TO_FILE=0 → console seule (comportement d'avant). LOG_KEEP_FILES = nombre
+# de fichiers log gardés (les plus anciens sont supprimés → carte SD du Pi).
+LOG_TO_FILE    = os.environ.get('LOG_TO_FILE', '1') not in ('0', 'false', 'False', '')
+LOG_KEEP_FILES = int(os.environ.get('LOG_KEEP_FILES', '20'))
+
 # ── Chemins fichiers audio temporaires ───────────────────────────────────────
 AUDIO_MP3 = str(BASE_DIR / 'temp' / 'audio.mp3')
 AUDIO_WAV = str(BASE_DIR / 'temp' / 'audio.wav')

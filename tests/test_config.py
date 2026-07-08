@@ -16,6 +16,8 @@ from config.settings import (
     AUDIO_MP3,
     AUDIO_WAV,
     HQ_CAPTURE_ENABLED,
+    LOG_TO_FILE,
+    LOG_KEEP_FILES,
 )
 
 
@@ -70,6 +72,16 @@ def test_hq_capture_enabled_bool():
     assert isinstance(HQ_CAPTURE_ENABLED, bool)
 
 
+def test_log_to_file_bool():
+    """LOG_TO_FILE doit être un booléen (parsing env robuste)."""
+    assert isinstance(LOG_TO_FILE, bool)
+
+
+def test_log_keep_files_positive():
+    """LOG_KEEP_FILES doit être un entier positif."""
+    assert isinstance(LOG_KEEP_FILES, int) and LOG_KEEP_FILES >= 0
+
+
 def test_camera_module_importable():
     """src.vision.camera doit s'importer sans matériel (Windows)."""
     from src.vision.camera import capturer
@@ -88,6 +100,8 @@ if __name__ == '__main__':
         test_audio_mp3_extension,
         test_audio_wav_extension,
         test_hq_capture_enabled_bool,
+        test_log_to_file_bool,
+        test_log_keep_files_positive,
         test_camera_module_importable,
     ]
     passed = 0

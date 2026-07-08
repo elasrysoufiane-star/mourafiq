@@ -33,15 +33,25 @@ mettre à jour le SDK : `pip install -U anthropic`.
 
 ## 3. Synchroniser la config
 
-Si de nouvelles variables `.env` ont été ajoutées côté dev, les reporter à la
-main dans le `.env` du Pi (comparer avec `.env.example`). Vérifier que les
-vraies clés (`GROQ_API_KEY`, `ANTHROPIC_API_KEY`) sont bien présentes.
+Depuis 2026-07-08, le `.env` ne contient que les CLÉS API — toute la config
+(providers, modèles, intervalles) vit dans `config/settings.py` avec des
+défauts « meilleure qualité ». Sur le Pi, réduire l'ancien `.env` à trois
+lignes (sinon ses vieilles valeurs `TTS_PROVIDER=edge`, `AUTO_DESCRIBE_INTERVAL=5`…
+écraseraient les nouveaux défauts) : `GROQ_API_KEY`, `ANTHROPIC_API_KEY`,
+`AZURE_SPEECH_KEY` (optionnel — vide = fallback edge-tts). Comparer avec
+`.env.example`.
 
 ## 4. Test réel
 
 ```bash
 python3 main.py
 ```
+
+Toute la sortie est aussi enregistrée dans `logs/mourafiq_AAAAMMJJ_HHMMSS.log`
+(horodatée + nom du thread) — la première ligne affiche `Logs → logs/...`.
+Pour copier un log au debug : `ls -t logs/` puis `cat logs/<le plus récent>`,
+ou depuis Windows : `scp som@<ip-pi>:~/mourafiq/logs/mourafiq_*.log .`.
+(`LOG_TO_FILE=0` dans `.env` = console seule si besoin.)
 
 Vérifier dans l'ordre :
 1. Message de bienvenue audible (TTS OK, sink Bluetooth OK)
