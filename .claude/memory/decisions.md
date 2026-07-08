@@ -6,6 +6,28 @@ date, décision, pourquoi, comment revenir dessus.
 
 ---
 
+## 2026-07-08b — Qualité dialogue/expérience (tokens no-object) : budgets séparés, Sonnet en continu, Opus OCR, suivi visuel
+
+**Décision** : (a) budgets tokens séparés — `CLAUDE_MAX_TOKENS=300` (à la
+demande + chat), `CLAUDE_SCENE_AUTO_MAX_TOKENS=80` (boucle de fond) ;
+(b) boucle continue AutoScene en `claude-sonnet-5` (au lieu de Haiku) ;
+(c) OCR à la demande en `claude-opus-4-8` (`CLAUDE_OCR_MODEL`), OCR de fond
+reste Sonnet ; (d) `CONV_MEMORY_TURNS=15` + garde la DERNIÈRE image vue à la
+demande, rattachée à la question chat suivante (suivi visuel) ;
+(e) `CLAUDE_IMG_QUALITY=90`.
+
+**Pourquoi** : demande « meilleure expérience + dialogue, coût no-object ».
+Principe directeur : le VRAI facteur limitant est la LATENCE vocale (utilisateur
+non-voyant qui attend une réponse parlée), pas le coût. Donc on met la qualité
+là où l'utilisateur attend peu (boucle de fond → Sonnet) ou où la précision
+prime et l'attente est acceptable (OCR à la demande → Opus). Opus reste écarté
+de la conversation et de la scène (trop lent). Budgets séparés = narration de
+fond brève (ne monopolise pas la parole, ↓écho) MAIS réponses riches quand
+l'utilisateur pose une vraie question. Le prochain gros levier de latence est
+le **streaming Claude→TTS** (parler dès la 1ʳᵉ phrase), gardé en chantier séparé.
+
+**Réversible via** : `.env` (chaque variable surcharge son défaut).
+
 ## 2026-07-08 — Défauts = meilleure qualité, .env = clés API uniquement, TTS Azure
 
 **Décision** : les défauts de `config/settings.py` passent en « meilleure

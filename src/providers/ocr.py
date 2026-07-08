@@ -37,7 +37,13 @@ def read_text(image, remember: bool = True) -> str:
 
 def _claude_ocr(image, remember: bool) -> str:
     from src.ai.claude_client import claude_read_text
-    return claude_read_text(image, remember=remember)
+    from config.settings import CLAUDE_OCR_MODEL, CLAUDE_VISION_MODEL
+    # À la demande (« قرا ليا », remember=True) → Opus (précision max : petits
+    # caractères, posologie, manuscrit). Boucle AutoScene (remember=False) →
+    # modèle continu (Sonnet) : lecture de fond « y a-t-il du texte ? », plus
+    # rapide, garde la cadence de la boucle.
+    model = CLAUDE_OCR_MODEL if remember else CLAUDE_VISION_MODEL
+    return claude_read_text(image, model=model, remember=remember)
 
 
 def _local_ocr(image) -> str:

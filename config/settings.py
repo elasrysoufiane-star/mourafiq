@@ -53,31 +53,39 @@ OPENAI_API_KEY      = os.environ.get('OPENAI_API_KEY',      '')
 # ── Claude (Anthropic) — cerveau vision+langage à la demande ──────────────────
 # Clé sur console.anthropic.com (format sk-ant-...). Vide = fallback Groq/local.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-# Modèles — stratégie MIXTE par défaut (decisions.md 2026-07-06/08) :
-# Sonnet 5 partout à la demande (conversation, « شنو قدامي؟ », OCR — qualité,
-# $2/$10 par 1M en intro jusqu'au 31/08/2026), Haiku 4.5 pour la boucle
-# continue AutoScene ($1/$5 par 1M — 600 appels/h à 6s, le coût est là).
-# Opus 4-8 écarté pour la conversation : latence vocale trop pénalisante.
+# Modèles — priorité EXPÉRIENCE (decisions.md 2026-07-06/08/08b). La latence
+# vocale est le vrai facteur limitant, pas le coût : on met la qualité là où
+# l'utilisateur attend peu (boucle de fond) ou là où la précision prime (OCR).
+# Sonnet 5 : conversation + « شنو قدامي؟ » à la demande + boucle continue.
+# Opus 4-8 : SEULEMENT l'OCR à la demande (lecture lettre/médicament — la
+# précision prime, l'utilisateur peut attendre 2s). Opus écarté de la
+# conversation et de la scène (trop lent → latence vocale pénalisante).
 CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-sonnet-5')
-CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
-# Modèle vision « haute qualité » pour les appels À LA DEMANDE (question vocale
-# « شنو قدامي؟ », lecture OCR) — réponse plus fine. La boucle auto continue,
-# elle, utilise CLAUDE_VISION_MODEL (moins cher).
+# Boucle continue AutoScene : Sonnet 5 (au lieu de Haiku) — « yeux » permanents
+# bien plus fins. La latence compte moins (narration de fond, pas d'attente).
+CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-sonnet-5')
+# Modèle vision « haute qualité » pour la scène À LA DEMANDE (« شنو قدامي؟ »).
 CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-sonnet-5')
-# Optimisation tokens : réponse parlée donc courte ; image redimensionnée +
-# compressée avant envoi (les tokens image montent avec la résolution).
-# 100 → descriptions parlées plus courtes (~10s) qu'à 150 (~15-18s) : moins de
-# chevauchement audio, moins d'écho capté, latence vocale plus basse, et un
-# non-voyant retient mieux une phrase courte. La consigne « court » est déjà
-# dans le prompt scène. Réponses chat aussi plafonnées ici (100 ≈ suffisant).
-CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '100'))
+# OCR À LA DEMANDE (« قرا ليا ») : Opus 4-8 = lecture la plus précise (petits
+# caractères, manuscrit, posologie). L'OCR de fond (boucle) reste sur
+# CLAUDE_VISION_MODEL (Sonnet) — voir src/providers/ocr.py.
+CLAUDE_OCR_MODEL = os.environ.get('CLAUDE_OCR_MODEL', 'claude-opus-4-8')
+# Budgets tokens SÉPARÉS par contexte (levier dialogue). À la demande + chat =
+# riche (l'utilisateur a posé une vraie question) ; boucle de fond = court
+# (narration brève qui ne monopolise pas la parole → moins d'écho/chevauchement).
+CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '300'))
+# Boucle AutoScene uniquement : description de fond courte (~8s parlé).
+CLAUDE_SCENE_AUTO_MAX_TOKENS = int(os.environ.get('CLAUDE_SCENE_AUTO_MAX_TOKENS', '80'))
 # La lecture OCR a besoin de plus de place qu'une description de scène
 # (rentre une lettre / notice entière) → plafond séparé, plus large.
 CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
-# 1568 = lettre/notice lisible sur le still HQ (~2400 tokens ≈ $0.005/lecture
-# en sonnet-5). Sans effet sur la boucle continue (source 640px, jamais agrandie).
+# 1568 = lettre/notice lisible sur le still HQ (~2400 tokens). Sans effet sur la
+# boucle continue (source 640px, jamais agrandie). Monter la RÉSOLUTION au-delà
+# est inutile (Claude redimensionne) — pour lire des petits caractères, c'est la
+# QUALITÉ JPEG qui compte (CLAUDE_IMG_QUALITY ci-dessous).
 CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '1568'))
-CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
+# 90 (au lieu de 70) → petits caractères plus nets pour l'OCR. Coût no-object.
+CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '90'))
 # Capture still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et la
 # scène à la demande, via switch_mode (~0.5-1s, ponctuel). La boucle AutoScene
 # garde le flux 640×480. 0 = désactivé (tout en 640×480, comportement d'avant).
@@ -152,5 +160,8 @@ WAKE_FOLLOWUP_WINDOW = float(os.environ.get('WAKE_FOLLOWUP_WINDOW', '15'))
 # اليسار؟ », « عاود », « زيدني تفاصيل », sans tout réexpliquer. Partagée entre le
 # chat et la vision À LA DEMANDE (la boucle AutoScene de fond ne l'alimente pas).
 # 0 = sans mémoire (chaque tour isolé, comportement précédent). Plus haut = plus
-# de contexte mais plus de tokens par appel.
-CONV_MEMORY_TURNS = int(os.environ.get('CONV_MEMORY_TURNS', '6'))
+# de contexte mais plus de tokens par appel. 15 (coût no-object) → dialogue de
+# suivi bien plus riche. En complément, la DERNIÈRE image vue à la demande est
+# gardée (src/core/memory.py) et rattachée à la question chat suivante → suivi
+# VISUEL (« شنو كانت الحاجة الزرقاء؟ ») même quand la question est en texte.
+CONV_MEMORY_TURNS = int(os.environ.get('CONV_MEMORY_TURNS', '15'))

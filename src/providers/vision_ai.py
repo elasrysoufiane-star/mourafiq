@@ -14,7 +14,11 @@ Import claude_client en lazy (dans _claude_scene) — testable Windows sans clé
 """
 import time
 
-from config.settings import ANTHROPIC_API_KEY, VISION_COOLDOWN, CLAUDE_VISION_MODEL, CLAUDE_VISION_MODEL_HQ
+from config.settings import (
+    ANTHROPIC_API_KEY, VISION_COOLDOWN,
+    CLAUDE_VISION_MODEL, CLAUDE_VISION_MODEL_HQ,
+    CLAUDE_MAX_TOKENS, CLAUDE_SCENE_AUTO_MAX_TOKENS,
+)
 
 _last_time = 0.0
 _last_desc = ''
@@ -53,7 +57,11 @@ def describe_scene(image, question: str = 'شنو قدامي؟', hq: bool = Fals
 def _claude_scene(image, question: str, hq: bool) -> str:
     from src.ai.claude_client import claude_describe_scene
     model = CLAUDE_VISION_MODEL_HQ if hq else CLAUDE_VISION_MODEL
+    # Budget tokens séparé : riche à la demande (vraie question), court dans la
+    # boucle de fond (narration brève → ne monopolise pas la parole, moins d'écho).
+    max_tokens = CLAUDE_MAX_TOKENS if hq else CLAUDE_SCENE_AUTO_MAX_TOKENS
     # hq=True = question vocale → mémorise (suivi possible). hq=False = boucle
     # auto de fond (narration continue, pas un tour de dialogue) → pas de
     # mémoire, pour éviter un contexte qui grossit en continu.
-    return claude_describe_scene(image, question, model=model, remember=hq)
+    return claude_describe_scene(image, question, model=model, remember=hq,
+                                 max_tokens=max_tokens)

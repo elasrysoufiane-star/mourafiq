@@ -26,6 +26,14 @@ from config.settings import CONV_MEMORY_TURNS
 
 _lock = threading.Lock()
 _history = []  # liste de {'role': 'user'|'assistant', 'content': str}
+# Dernière image vue À LA DEMANDE (JPEG déjà encodé base64). Rattachée à la
+# question chat suivante → suivi VISUEL (« شنو كانت الحاجة الزرقاء؟ ») même si la
+# question arrive en texte. Une seule image (la plus récente) ; jamais dans
+# l'historique (qui reste texte + alternance stricte). La boucle auto de fond
+# ne l'alimente pas (remember=False). Peut être un peu obsolète si l'utilisateur
+# a bougé — mais un suivi est presque toujours immédiat. Remplacée à chaque
+# nouvelle vue à la demande, effacée par reset().
+_last_image = None
 
 
 def get_history() -> list:
@@ -33,6 +41,20 @@ def get_history() -> list:
     message courant dans l'appel Claude. Commence toujours par un tour 'user'."""
     with _lock:
         return list(_history)
+
+
+def set_last_image(data_b64) -> None:
+    """Mémorise la dernière image vue à la demande (JPEG base64). None efface."""
+    global _last_image
+    with _lock:
+        _last_image = data_b64
+
+
+def get_last_image():
+    """Dernière image vue à la demande (base64) ou None. Sert de contexte visuel
+    à la question chat suivante."""
+    with _lock:
+        return _last_image
 
 
 def add_turn(user_text: str, assistant_text: str) -> None:
@@ -53,5 +75,7 @@ def add_turn(user_text: str, assistant_text: str) -> None:
 
 def reset() -> None:
     """Vide la mémoire (nouvelle session / changement de contexte)."""
+    global _last_image
     with _lock:
         _history.clear()
+        _last_image = None

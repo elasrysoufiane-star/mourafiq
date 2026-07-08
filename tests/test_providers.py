@@ -60,8 +60,9 @@ def test_default_quality_mode():
     import config.settings as settings
     variables = ('AI_PROVIDER', 'STT_PROVIDER', 'TTS_PROVIDER', 'OCR_PROVIDER',
                  'STT_MODEL', 'CLAUDE_TEXT_MODEL', 'CLAUDE_VISION_MODEL',
-                 'CLAUDE_VISION_MODEL_HQ', 'AUTO_DESCRIBE_INTERVAL',
-                 'CLAUDE_IMG_MAX_PX', 'AZURE_SPEECH_REGION')
+                 'CLAUDE_VISION_MODEL_HQ', 'CLAUDE_OCR_MODEL', 'AUTO_DESCRIBE_INTERVAL',
+                 'CLAUDE_IMG_MAX_PX', 'CLAUDE_IMG_QUALITY', 'CLAUDE_MAX_TOKENS',
+                 'CLAUDE_SCENE_AUTO_MAX_TOKENS', 'CONV_MEMORY_TURNS', 'AZURE_SPEECH_REGION')
     sauvegarde = {v: os.environ.pop(v) for v in variables if v in os.environ}
     try:
         importlib.reload(settings)
@@ -71,10 +72,15 @@ def test_default_quality_mode():
         assert settings.OCR_PROVIDER == 'claude', "OCR_PROVIDER par défaut doit être 'claude'"
         assert settings.STT_MODEL    == 'whisper-large-v3', "STT_MODEL par défaut doit être 'whisper-large-v3'"
         assert settings.CLAUDE_TEXT_MODEL      == 'claude-sonnet-5'
-        assert settings.CLAUDE_VISION_MODEL    == 'claude-haiku-4-5'
+        assert settings.CLAUDE_VISION_MODEL    == 'claude-sonnet-5', "boucle continue en Sonnet 5"
         assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-sonnet-5'
+        assert settings.CLAUDE_OCR_MODEL       == 'claude-opus-4-8', "OCR à la demande en Opus"
         assert settings.AUTO_DESCRIBE_INTERVAL == 10
+        assert settings.CLAUDE_MAX_TOKENS      == 300, "réponses à la demande riches"
+        assert settings.CLAUDE_SCENE_AUTO_MAX_TOKENS == 80, "narration de fond courte"
         assert settings.CLAUDE_IMG_MAX_PX      == 1568
+        assert settings.CLAUDE_IMG_QUALITY     == 90
+        assert settings.CONV_MEMORY_TURNS      == 15
         assert settings.AZURE_SPEECH_REGION    == 'westeurope'
     finally:
         os.environ.update(sauvegarde)

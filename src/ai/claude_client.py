@@ -31,7 +31,7 @@ import time
 
 from config.settings import (
     ANTHROPIC_API_KEY,
-    CLAUDE_TEXT_MODEL, CLAUDE_VISION_MODEL,
+    CLAUDE_TEXT_MODEL, CLAUDE_VISION_MODEL, CLAUDE_OCR_MODEL,
     CLAUDE_MAX_TOKENS, CLAUDE_OCR_MAX_TOKENS,
     CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
 )
@@ -171,12 +171,25 @@ def claude_darija(question: str) -> str:
     (l'appelant — providers.ai — bascule alors sur Groq)."""
     for tentative in range(3):
         try:
+            # Suivi VISUEL : si une image a été vue à la demande, on la rattache
+            # à la question texte → « شنو كانت الحاجة الزرقاء؟ » marche même sans
+            # nouvelle capture. CLAUDE_TEXT_MODEL (Sonnet) est multimodal.
+            last_img = memory.get_last_image()
+            if last_img:
+                user_content = [
+                    {'type': 'image', 'source': {
+                        'type': 'base64', 'media_type': 'image/jpeg', 'data': last_img,
+                    }},
+                    {'type': 'text', 'text': question},
+                ]
+            else:
+                user_content = question
             resp = _get_client().messages.create(
                 model=CLAUDE_TEXT_MODEL,
                 max_tokens=CLAUDE_MAX_TOKENS,
                 thinking=_THINKING_OFF,
                 system=_system_block(_CHAT_SYSTEM_PROMPT),
-                messages=memory.get_history() + [{'role': 'user', 'content': question}],
+                messages=memory.get_history() + [{'role': 'user', 'content': user_content}],
             )
             _log_usage(resp, 'texte')
             reponse = _extract_text(resp)
@@ -208,6 +221,11 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag,
     for tentative in range(3):
         try:
             data = _encode_image(image)
+            # À la demande (remember=True) → garder l'image pour un suivi visuel
+            # en chat (« وشنو كان حداها؟ »). La boucle de fond (remember=False) ne
+            # la garde pas (image obsolète en continu + on ne veut pas de suivi).
+            if remember:
+                memory.set_last_image(data)
             resp = _get_client().messages.create(
                 model=model,
                 max_tokens=max_tokens,
@@ -240,9 +258,11 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag,
 
 
 def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None,
-                          remember: bool = True) -> str:
+                          remember: bool = True, max_tokens: int = None) -> str:
     """Image (numpy RGB) + question → description de scène en darija.
-    `model` permet de choisir Haiku (continu) ou Sonnet/Opus (à la demande).
+    `model` permet de choisir le modèle (continu vs à la demande).
+    `max_tokens` : budget séparé — riche à la demande (CLAUDE_MAX_TOKENS),
+    court en boucle de fond (CLAUDE_SCENE_AUTO_MAX_TOKENS) — voir providers.vision_ai.
     `remember` : True à la demande (suivi possible), False en boucle auto de
     fond (narration continue, pas un tour de dialogue — évite un contexte
     qui grossit en continu).
@@ -250,7 +270,7 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
     d'indisponibilité (pas de fallback local, YOLO retiré)."""
     return _vision_call(
         image, question, _VISION_SYSTEM_PROMPT,
-        model or CLAUDE_VISION_MODEL, CLAUDE_MAX_TOKENS,
+        model or CLAUDE_VISION_MODEL, max_tokens or CLAUDE_MAX_TOKENS,
         'scene', remember=remember,
     )
 
@@ -258,11 +278,13 @@ def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: s
 def claude_read_text(image, model: str = None, remember: bool = True) -> str:
     """Image (numpy RGB) → lecture + sens du texte en darija (OCR par VLM).
     Plus de tokens que la scène (peut contenir une lettre entière).
+    `model` : à la demande = Opus (CLAUDE_OCR_MODEL, précision max) ; boucle de
+    fond = modèle continu — choisi par providers.ocr selon `remember`.
     `remember` : True à la demande (suivi possible : « عاود », « شنو التاريخ؟ »),
     False en boucle AutoScene (lecture de fond, pas un tour de dialogue).
     ClaudeError si échec → providers.ocr bascule sur Tesseract local."""
     return _vision_call(
         image, 'قرا ليا هاد المكتوب', _OCR_SYSTEM_PROMPT,
-        model or CLAUDE_VISION_MODEL, CLAUDE_OCR_MAX_TOKENS,
+        model or CLAUDE_OCR_MODEL, CLAUDE_OCR_MAX_TOKENS,
         'ocr', remember=remember,
     )

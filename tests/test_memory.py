@@ -62,6 +62,30 @@ def test_get_history_is_copy():
     assert len(memory.get_history()) == 2, "get_history doit renvoyer une copie"
 
 
+# ── Dernière image (suivi visuel) ─────────────────────────────────────────────
+def test_last_image_absent_initial():
+    memory.reset()
+    assert memory.get_last_image() is None, "aucune image au départ"
+
+def test_last_image_set_get():
+    memory.reset()
+    memory.set_last_image('base64-fake')
+    assert memory.get_last_image() == 'base64-fake'
+
+def test_last_image_replaced():
+    """La dernière vue à la demande remplace la précédente (une seule gardée)."""
+    memory.reset()
+    memory.set_last_image('img1')
+    memory.set_last_image('img2')
+    assert memory.get_last_image() == 'img2'
+
+def test_last_image_cleared_by_reset():
+    memory.reset()
+    memory.set_last_image('img')
+    memory.reset()
+    assert memory.get_last_image() is None, "reset doit effacer la dernière image"
+
+
 # ── Nettoyage TTS ─────────────────────────────────────────────────────────────
 def test_clean_none_and_empty():
     assert clean_for_speech(None) is None
@@ -96,6 +120,10 @@ if __name__ == '__main__':
         test_starts_with_user_and_alternates,
         test_reset,
         test_get_history_is_copy,
+        test_last_image_absent_initial,
+        test_last_image_set_get,
+        test_last_image_replaced,
+        test_last_image_cleared_by_reset,
         test_clean_none_and_empty,
         test_clean_plain_unchanged,
         test_clean_bold,
