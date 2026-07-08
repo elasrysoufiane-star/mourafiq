@@ -169,6 +169,18 @@ def reconnaitre_voix() -> str:
     timeout = 0  # chunks sans voix (reset à chaque détection vocale)
 
     while True:
+        # Anti-écho : si l'assistant s'est mis à parler PENDANT qu'on enregistre,
+        # tout ce qu'on capte est l'écho du haut-parleur repris par le micro
+        # (le système s'entend lui-même) → on jette la capture. Le verrou au
+        # début (while conversation_active) ne couvre que l'ouverture du micro ;
+        # ce test protège la durée de l'enregistrement (AutoScene parle souvent).
+        if state.conversation_active.is_set():
+            print("Capture annulée — l'assistant parle (anti-écho)")
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            return ''
+
         data   = stream.read(1024, exception_on_overflow=False)
         chunk  = np.frombuffer(data, dtype=np.int16)
         volume = np.abs(chunk).mean()

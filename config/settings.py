@@ -66,7 +66,11 @@ CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
 CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-sonnet-5')
 # Optimisation tokens : réponse parlée donc courte ; image redimensionnée +
 # compressée avant envoi (les tokens image montent avec la résolution).
-CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '150'))
+# 100 → descriptions parlées plus courtes (~10s) qu'à 150 (~15-18s) : moins de
+# chevauchement audio, moins d'écho capté, latence vocale plus basse, et un
+# non-voyant retient mieux une phrase courte. La consigne « court » est déjà
+# dans le prompt scène. Réponses chat aussi plafonnées ici (100 ≈ suffisant).
+CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '100'))
 # La lecture OCR a besoin de plus de place qu'une description de scène
 # (rentre une lettre / notice entière) → plafond séparé, plus large.
 CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
@@ -86,9 +90,11 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
 # La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-# Attention coût (≈600 appels/h à 6s pour la scène, × 2 si OCR_PROVIDER=claude
-# aussi) — voir CLAUDE.md.
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '6'))
+# 10s (au lieu de 6) laisse un vrai silence entre deux descriptions → le micro
+# peut enfin entendre l'utilisateur (avant : narration quasi continue, aucune
+# fenêtre pour parler). Attention coût (≈360 appels/h à 10s pour la scène,
+# × 2 si OCR_PROVIDER=claude aussi) — voir CLAUDE.md.
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '10'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 # Surchargeable via .env (cohérent avec le reste de la config).

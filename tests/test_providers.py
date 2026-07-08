@@ -73,7 +73,7 @@ def test_default_quality_mode():
         assert settings.CLAUDE_TEXT_MODEL      == 'claude-sonnet-5'
         assert settings.CLAUDE_VISION_MODEL    == 'claude-haiku-4-5'
         assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-sonnet-5'
-        assert settings.AUTO_DESCRIBE_INTERVAL == 6
+        assert settings.AUTO_DESCRIBE_INTERVAL == 10
         assert settings.CLAUDE_IMG_MAX_PX      == 1568
         assert settings.AZURE_SPEECH_REGION    == 'westeurope'
     finally:
