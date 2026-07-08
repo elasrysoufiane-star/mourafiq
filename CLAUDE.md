@@ -55,7 +55,7 @@ mourafiq/
 │   ├── providers/
 │   │   ├── ai.py                   # get_ai_response() — routage groq/claude/openai
 │   │   ├── stt.py                  # transcribe() — routage groq/openai
-│   │   ├── tts.py                  # synthesize() — routage edge/gtts/elevenlabs
+│   │   ├── tts.py                  # synthesize() — routage azure/edge/gtts/elevenlabs
 │   │   ├── vision_ai.py            # describe_scene() — 100% Claude, message clair si échec
 │   │   └── ocr.py                  # read_text() — routage local(Tesseract)/claude
 │   └── conversation/
@@ -65,7 +65,7 @@ mourafiq/
 │   ├── test_config.py
 │   ├── test_intents.py             # inclut mot de réveil (contient_wake/retirer_wake)
 │   ├── test_providers.py           # routage AI/STT/TTS/ocr + clés
-│   ├── test_fallbacks.py           # bascule (Groq/Tesseract) ou message clair si Claude en panne
+│   ├── test_fallbacks.py           # bascule (Groq/Tesseract/edge-tts) ou message clair si Claude/Azure en panne
 │   ├── test_listener.py            # VAD webrtcvad/seuil + index micro (sans matériel)
 │   └── smoke_claude_vision.py      # test isolé Claude vision (Pi ou image fixe)
 ├── temp/                           # audio.mp3, audio.wav (auto-créé)
@@ -104,9 +104,17 @@ main.py              ◄── core.app
 | Feature | Modèle | Quota gratuit |
 |---------|--------|---------------|
 | NLP / Darija | `llama-3.1-8b-instant` | 14 400 req/jour |
-| STT Arabe | `whisper-large-v3-turbo` | 7 200 req/jour |
+| STT Arabe | `whisper-large-v3` (défaut, +précision darija) ou `-turbo` (rapide) | 7 200 req/jour |
 
 Clé sur **console.groq.com** → API Keys (format `gsk_...`)
+
+## API — Azure Speech (TTS officiel, optionnel)
+
+Même voix marocaine `ar-MA-JamalNeural` qu'edge-tts (catalogue identique), mais
+API officielle stable. Tier **F0 gratuit : 500K caractères/mois** — largement
+assez. Clé sur **portal.azure.com** → ressource « Speech service » (région
+`westeurope` par défaut, sinon surcharger `AZURE_SPEECH_REGION`). Sans clé ou
+en cas d'échec : fallback automatique edge-tts.
 
 ## API — Claude (Anthropic, optionnel — cerveau vision à la demande)
 
@@ -118,20 +126,20 @@ Clé sur **console.groq.com** → API Keys (format `gsk_...`)
 
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). **Obligatoire pour la vision** (YOLO a été retiré, il n'y a plus de fallback local) — sans clé ou en cas d'échec, message vocal clair d'indisponibilité au lieu d'une description.
 
-**Vision 100% Claude (YOLO retiré, 2026-07-07) :** Claude est appelé sur intention vocale (`شنو قدامي؟`) **et** en permanence par la boucle AutoScene (voir `AUTO_DESCRIBE_INTERVAL`, coût continu, tourne avec ou sans micro). Leviers : image redimensionnée à 768px + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut en continu (Sonnet à la demande). Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
+**Vision 100% Claude (YOLO retiré, 2026-07-07) :** Claude est appelé sur intention vocale (`شنو قدامي؟`) **et** en permanence par la boucle AutoScene (voir `AUTO_DESCRIBE_INTERVAL`, coût continu, tourne avec ou sans micro). Leviers : image redimensionnée (640px boucle continue / 1568px still HQ) + JPEG q70, `max_tokens=150`, cooldown anti double-appel, Haiku par défaut en continu (Sonnet à la demande). Usage (in/cache_read/out) loggé à chaque appel. Le marqueur de prompt caching est présent mais n'aide que si le prompt système dépasse le minimum cacheable du modèle.
 
-## Mode « Full Claude » (branche `feat/full-claude-assistant`)
+## Mode « Full Claude » (DÉFAUT du code depuis 2026-07-08)
 
-Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix inchangées (Claude ne fait pas d'audio). Activé **uniquement via `.env`** — la conversation reste gratuite (`groq`) par défaut ; la vision, elle, est toujours Claude (voir ci-dessus).
+Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix hors Claude (il ne fait pas d'audio). C'est le mode PAR DÉFAUT : le `.env` ne contient que les clés API, toute la config vit dans `config/settings.py`. Sans clé, chaque brique retombe automatiquement sur le gratuit (claude→groq, azure→edge, OCR claude→Tesseract).
 
-| Composant | Provider full-Claude | Modèle |
-|-----------|----------------------|--------|
-| Conversation darija | `AI_PROVIDER=claude` | `CLAUDE_TEXT_MODEL` (sonnet conseillé) |
-| Description scène (à la demande) | toujours Claude | `CLAUDE_VISION_MODEL_HQ` (sonnet) |
+| Composant | Provider (défaut) | Modèle |
+|-----------|-------------------|--------|
+| Conversation darija | `AI_PROVIDER=claude` (fallback groq) | `CLAUDE_TEXT_MODEL` (sonnet-5) |
+| Description scène (à la demande) | toujours Claude | `CLAUDE_VISION_MODEL_HQ` (sonnet-5) |
 | Description scène (auto, toujours active) | toujours Claude | `CLAUDE_VISION_MODEL` (haiku, éco) |
-| Lecture texte / OCR | `OCR_PROVIDER=claude` | `CLAUDE_VISION_MODEL_HQ` + fallback Tesseract |
-| STT (micro) | **reste** `groq` | Whisper |
-| TTS (voix) | **reste** `edge` | ar-MA-JamalNeural |
+| Lecture texte / OCR | `OCR_PROVIDER=claude` (fallback Tesseract) | `CLAUDE_VISION_MODEL_HQ` (sonnet-5) |
+| STT (micro) | **reste** `groq` (gratuit) | `whisper-large-v3` |
+| TTS (voix) | `azure` — Azure Speech officiel (fallback edge) | ar-MA-JamalNeural |
 
 **Stratégie MIXTE (coût/qualité) :** continu = Haiku (`CLAUDE_VISION_MODEL`), à la demande = Sonnet (`CLAUDE_VISION_MODEL_HQ`, déclenché par `hq=True` dans `describe_scene`).
 
@@ -150,7 +158,7 @@ Le thread `Vision` (`mode_vision()`, boucle YOLO continue) a été **retiré le
 vision maintenant, 100% Claude.
 
 **AutoScene tourne TOUJOURS** (`AUTO_DESCRIBE_INTERVAL > 0`), que l'utilisateur
-parle ou non, avec ou sans micro : toutes les N secondes (2s par défaut),
+parle ou non, avec ou sans micro : toutes les N secondes (6s par défaut),
 `capture → describe_scene() + read_text() → parler()` décrit la caméra en détail
 ET lit tout texte visible, par la voix. `state.mic_ok` ne pilote que le
 thread **Conversation** (écoute + réponse), lancé EN PLUS d'AutoScene si un
@@ -187,26 +195,26 @@ trouvé) sont tues côté `mode_auto_scene()` pour ne pas les répéter à chaqu
 
 ## Providers (src/providers/)
 
-Couche de routage — configurer via `.env` (défaut = tout gratuit).
+Couche de routage — défauts = MEILLEURE QUALITÉ (2026-07-08), surchargeables via `.env` ; sans clé, bascule automatique vers le gratuit.
 
 | Variable | Défaut | Options | Fichier |
 |----------|--------|---------|---------|
-| `AI_PROVIDER` | `groq` | `groq`, `claude`, `openai`* | `src/providers/ai.py` |
+| `AI_PROVIDER` | `claude` (fallback groq) | `claude`, `groq`, `openai`* | `src/providers/ai.py` |
 | `STT_PROVIDER` | `groq` | `groq`, `openai`* | `src/providers/stt.py` |
-| `TTS_PROVIDER` | `edge` | `edge`, `gtts`, `elevenlabs` | `src/providers/tts.py` |
-| `OCR_PROVIDER` | `local` | `local`, `claude` | `src/providers/ocr.py` |
+| `TTS_PROVIDER` | `azure` (fallback edge) | `azure`, `edge`, `gtts`, `elevenlabs` | `src/providers/tts.py` |
+| `OCR_PROVIDER` | `claude` (fallback local) | `claude`, `local` | `src/providers/ocr.py` |
 
 *options futures — structure prête, fallback automatique vers groq si clé absente.
 `claude` (AI + OCR) : payant, fallback automatique vers groq/local si `ANTHROPIC_API_KEY` absente.
 **La scène (`src/providers/vision_ai.py`) n'a PAS de variable provider** — elle passe
 TOUJOURS par Claude (YOLO retiré, plus de fallback local). Sans clé ou en cas
 d'échec : message vocal clair, jamais de silence, jamais d'exception.
-**Claude ne fait PAS d'audio** : STT reste Whisper/Groq, TTS reste edge-tts/ElevenLabs — un mode « 100% Claude » se limite au cerveau (langage + vision).
+**Claude ne fait PAS d'audio** : STT reste Whisper/Groq, TTS reste Azure/edge-tts — un mode « 100% Claude » se limite au cerveau (langage + vision).
 
 **Règles :**
-1. Mode par défaut = gratuit (`groq` + `edge` + `local`), SAUF la scène qui nécessite `ANTHROPIC_API_KEY` (payant, pas de fallback local). Ne jamais changer les défauts gratuits dans le code.
+1. Défauts du code = MEILLEURE QUALITÉ (`claude` + `azure` + `claude`, décision 2026-07-08 — voir `.claude/memory/decisions.md`) ; le `.env` ne contient QUE les clés API. Le gratuit n'est plus le défaut mais le FALLBACK automatique : sans clé ou en panne → groq / edge-tts / Tesseract, jamais de crash, jamais de silence (sauf la scène : message vocal clair, pas de fallback local).
 2. Si clé payante absente **OU appel Claude en échec après retries** → message clair, jamais d'exception non gérée. `claude_client` lève `ClaudeError` (jamais de phrase d'erreur avalée) ; la couche providers attrape et bascule : chat→Groq, OCR→Tesseract, scène→message vocal clair d'indisponibilité (pas de bascule locale, YOLO retiré) (`tests/test_fallbacks.py`).
-3. GPS reste toujours local. Tesseract reste le fallback OCR (et le défaut) — Claude OCR est opt-in.
+3. GPS reste toujours local. Tesseract reste le fallback OCR — Claude OCR est le défaut depuis 2026-07-08.
 4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
 5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire` / `read_text` / `lire_texte`) — rester testable sur Windows sans matériel.
 
@@ -216,32 +224,34 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 |-----------|--------|------|
 | `GROQ_API_KEY` | `os.environ.get(...)` | Vide si absent (erreur levée dans app.init()) |
 | `DEMO_MODE` | `free` | `free` (logique normale) ou `demo` (documentation uniquement) |
-| `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
+| `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix marocaine — utilisée par Azure Speech ET edge-tts (même catalogue) |
 | `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
 | `GPS_PORT` | `/dev/ttyS0` | Port série GPS (env-overridable) |
 | `GPS_BAUD` | `9600` | Baud GPS (env-overridable) |
 | `GPS_READ_TIMEOUT` | `3` | Durée max lecture NMEA (s) avant abandon |
 | `GEOCODE_ENABLED` | `1` | Reverse geocoding lat/lon → adresse (Nominatim) ; 0 = coords brutes |
 | `GEOCODE_TIMEOUT` | `5` | Timeout requête Nominatim (s) |
-| `AI_PROVIDER` | `groq` | Provider NLP (groq / claude / openai) |
+| `AI_PROVIDER` | `claude` | Provider NLP (claude / groq / openai) — fallback groq sans clé |
 | `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
-| `STT_MODEL` | `whisper-large-v3-turbo` | Modèle Whisper Groq (`whisper-large-v3` pour +précision) |
-| `TTS_PROVIDER` | `edge` | Provider TTS (edge / gtts / elevenlabs) |
-| `OCR_PROVIDER` | `local` | Provider lecture texte (local Tesseract / claude, fallback Tesseract) |
+| `STT_MODEL` | `whisper-large-v3` | Modèle Whisper Groq (`whisper-large-v3-turbo` si la vitesse prime) |
+| `TTS_PROVIDER` | `azure` | Provider TTS (azure / edge / gtts / elevenlabs) — fallback edge sans clé |
+| `OCR_PROVIDER` | `claude` | Provider lecture texte (claude / local) — fallback Tesseract sans clé |
+| `AZURE_SPEECH_KEY` | `""` | Clé Azure Speech (TTS officiel, tier F0 gratuit 500K car./mois) ; vide = fallback edge-tts |
+| `AZURE_SPEECH_REGION` | `westeurope` | Région de la ressource Azure Speech |
 | `ELEVENLABS_API_KEY` | `""` | Clé ElevenLabs (vide = fallback edge) |
 | `ELEVENLABS_VOICE_ID` | `""` | Voice ID ElevenLabs (vide = voix par défaut Adam) |
 | `OPENAI_API_KEY` | `""` | Clé OpenAI (non utilisé par défaut) |
 | `ANTHROPIC_API_KEY` | `""` | Clé Claude — **requise pour la scène** (pas de fallback local, YOLO retiré) ; vide = fallback groq pour le chat/OCR uniquement |
-| `CLAUDE_TEXT_MODEL` | `claude-haiku-4-5` | Modèle conversation darija (`claude_darija`) |
+| `CLAUDE_TEXT_MODEL` | `claude-sonnet-5` | Modèle conversation darija (`claude_darija`) |
 | `CLAUDE_VISION_MODEL` | `claude-haiku-4-5` | Modèle VLM **continu** (boucle auto) — éco |
-| `CLAUDE_VISION_MODEL_HQ` | `=VISION_MODEL` | Modèle VLM **à la demande** (« شنو قدامي » + OCR) — qualité (sonnet) |
+| `CLAUDE_VISION_MODEL_HQ` | `claude-sonnet-5` | Modèle VLM **à la demande** (« شنو قدامي » + OCR) — qualité |
 | `CLAUDE_MAX_TOKENS` | `150` | Plafond réponse scène/chat (parlée → courte) |
 | `CLAUDE_OCR_MAX_TOKENS` | `400` | Plafond réponse OCR (lettre/notice → plus longue) |
-| `CLAUDE_IMG_MAX_PX` | `768` | Taille max image avant envoi (tokens). Monter à 1568 pour profiter du still HQ |
+| `CLAUDE_IMG_MAX_PX` | `1568` | Taille max image avant envoi (tokens). 1568 = profite du still HQ ; sans effet sur la boucle continue (source 640px) |
 | `CLAUDE_IMG_QUALITY` | `70` | Qualité JPEG image avant envoi (tokens) |
 | `HQ_CAPTURE_ENABLED` | `1` | Still pleine résolution capteur pour OCR + scène à la demande (`capturer(hq=True)`, switch_mode ~0.5-1s). 0 = tout en 640×480 |
 | `VISION_COOLDOWN` | `3` | Anti double-appel scène (secondes) |
-| `AUTO_DESCRIBE_INTERVAL` | `2` | Description scène (toujours Claude) + OCR TOUJOURS actives, avec ou sans micro (s ; 0 = désactivé). OCR aussi Claude si `OCR_PROVIDER=claude` |
+| `AUTO_DESCRIBE_INTERVAL` | `6` | Description scène (toujours Claude) + OCR TOUJOURS actives, avec ou sans micro (s ; 0 = désactivé). ≈600 appels scène/h à 6s, ×2 avec OCR claude |
 | `MIC_DEVICE_INDEX` | `1` | Index micro PyAudio (1 = pipewire, défaut historique Pi). `-1` = micro par défaut système (à utiliser avec un micro USB) |
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
@@ -336,10 +346,11 @@ pytest tests/ -v
 | OCR dans AutoScene + intervalle 2s (2026-07-06) | `mode_auto_scene()` appelle maintenant `read_text()` en plus de `describe_scene()` à chaque cycle, sur la même capture (pas de second accès caméra). Les réponses creuses (`_OCR_SANS_RESULTAT` : aucun texte / Tesseract indisponible) sont tues pour ne pas les répéter en boucle. `read_text()`/`claude_read_text()` acceptent `remember=` (défaut `True` à la demande, `False` dans la boucle — pas un tour de dialogue, cohérent avec `describe_scene(..., hq=)`). `AUTO_DESCRIBE_INTERVAL` par défaut `5` → `2`. ⚠️ Coût doublé si `VISION_AI_PROVIDER` ET `OCR_PROVIDER` sont tous deux `claude` (2 appels/cycle) | `src/vision/detector.py`, `src/providers/ocr.py`, `src/ai/claude_client.py`, `config/settings.py`, `.env.example`, `.claude/skills/tune-claude/SKILL.md` |
 | YOLO retiré, vision 100% Claude (2026-07-07) | Demande explicite : YOLO jugé trop faible en conditions réelles. Suppression de `mode_vision()` (thread YOLO continu), `_local_scene()`/`_phraser_objets()` (fallback hors-ligne), `src/vision/translations.py`, `CONF_SEUIL`, `MODEL_PATH`, `models/yolov8n.pt`, dépendance `ultralytics`, `VISION_AI_PROVIDER` (supprimée — plus qu'un seul chemin). `describe_scene()` appelle toujours Claude ; si échec/clé absente → message vocal clair (`_INDISPONIBLE`), jamais de silence mais plus de détection locale de secours. Conséquence : la description de scène **n'est plus gratuite**. Voir `.claude/memory/decisions.md` pour le détail | `src/vision/detector.py`, `src/providers/vision_ai.py`, `src/core/app.py`, `src/core/state.py`, `config/settings.py`, `requirements.txt`, `tests/test_fallbacks.py`, `tests/test_providers.py`, `tests/test_config.py` |
 | Timeout client anthropic (2026-07-07) | `anthropic.Anthropic(..., timeout=15.0, max_retries=0)` — le SDK timeoutait à ~10 MIN par défaut et retryait en plus en interne (silencieusement), en amont de notre propre boucle de retry loggée. Sur réseau Pi dégradé : silence total (aucune description, aucune erreur) pendant potentiellement plusieurs minutes après le retrait de YOLO (plus de fallback local pour combler ce trou). Maintenant : échec rapide (15s) → notre retry/fallback (loggé, parlé) prend le relais en quelques dizaines de secondes max | `src/ai/claude_client.py` |
+| Défauts qualité + TTS Azure (2026-07-08) | Demande explicite (présentation projet, « meilleur résultat », coût accepté) : les défauts du code passent en qualité max, le `.env` ne contient plus QUE les clés API. Nouveau provider `TTS_PROVIDER=azure` (Azure Speech REST officiel via stdlib urllib, même voix `ar-MA-JamalNeural` qu'edge-tts, tier F0 gratuit 500K car./mois, fallback edge sans clé ou en panne). Défauts : `AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `STT_MODEL=whisper-large-v3`, `CLAUDE_TEXT_MODEL`/`_HQ=claude-sonnet-5`, `CLAUDE_IMG_MAX_PX=1568`, `AUTO_DESCRIBE_INTERVAL=6`. Bascule auto vers le gratuit testée (`test_tts_azure_*`, `test_default_quality_mode`) | `src/providers/tts.py`, `config/settings.py`, `.env.example`, `tests/test_providers.py`, `tests/test_fallbacks.py` |
 
-**Activation (`.env`) :** `AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `ANTHROPIC_API_KEY=sk-ant-...`, `CLAUDE_TEXT_MODEL=claude-sonnet-5`, `CLAUDE_VISION_MODEL_HQ=claude-sonnet-5`. `GROQ_API_KEY` reste obligatoire (STT + démarrage). La scène (`describe_scene`) passe TOUJOURS par Claude, avec ou sans ce mode — `ANTHROPIC_API_KEY` est donc requise dès le mode gratuit par défaut. Coût piloté par `AUTO_DESCRIBE_INTERVAL` (vision continue) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max prêts à coller : `.claude/skills/tune-claude/SKILL.md`.
+**Activation : rien à activer** — les défauts du code SONT le mode qualité depuis 2026-07-08. `.env` = clés uniquement : `GROQ_API_KEY` (obligatoire — STT + démarrage), `ANTHROPIC_API_KEY` (obligatoire pour la vision — scène/OCR/conversation), `AZURE_SPEECH_KEY` (optionnel — TTS officiel, vide = edge-tts). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (6s ≈ 600 appels scène/h, ×2 avec OCR claude) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max : `.claude/skills/tune-claude/SKILL.md`.
 
-**Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-5`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
+**Monter encore la qualité (via `.env`) :** `CLAUDE_VISION_MODEL=claude-sonnet-5` (boucle continue en Sonnet — coût ×2 sur ~600 appels/h) ou `CLAUDE_VISION_MODEL_HQ=claude-opus-4-8`. ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
 
 ## Dossier `.claude/` (agents, skills, mémoire projet)
 
@@ -365,8 +376,8 @@ Ce CLAUDE.md est chargé dans **chaque** session. Le tenir à jour après chaque
 
 | Besoin | Gratuit | Payant |
 |--------|---------|--------|
-| NLP Darija | **Groq** `llama-3.1-8b-instant` | Gemini 1.5 Flash $0.075/1M |
-| STT Arabe | **Groq** `whisper-large-v3-turbo` | OpenAI Whisper $0.006/min |
-| TTS Arabe | **edge-tts** + fallback gTTS | ElevenLabs $5/mo |
+| NLP Darija | **Groq** `llama-3.1-8b-instant` (fallback) | **Claude Sonnet 5** (défaut) |
+| STT Arabe | **Groq** `whisper-large-v3` (défaut, gratuit) | OpenAI Whisper $0.006/min |
+| TTS Arabe | **Azure Speech** F0 500K car./mois (défaut) ; edge-tts + gTTS (fallbacks) | ElevenLabs écarté (pas de voix darija, cher) |
 | Description de scène | — (aucune option gratuite, YOLO retiré) | **Claude** (obligatoire, `ANTHROPIC_API_KEY`) |
 | OCR | **Tesseract** local (défaut) | Claude (`OCR_PROVIDER=claude`) |

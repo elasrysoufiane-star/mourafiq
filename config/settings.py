@@ -19,22 +19,32 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 # ── Mode et providers ─────────────────────────────────────────────────────────
 # DEMO_MODE : 'free' (défaut) ou 'demo' (documentation uniquement, pas de logique)
+# Défauts = MEILLEURE QUALITÉ (décision 2026-07-08, assistant pour malvoyant) :
+# le .env ne contient que les clés API, toute la config vit ici. Sans clé, chaque
+# provider retombe automatiquement sur le gratuit (claude→groq, azure→edge,
+# OCR claude→Tesseract) — l'app tourne toujours, jamais de silence.
 DEMO_MODE    = os.environ.get('DEMO_MODE',    'free')
-AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'groq')   # groq | openai | claude | ollama
+AI_PROVIDER  = os.environ.get('AI_PROVIDER',  'claude') # claude (défaut, fallback groq) | groq | openai | ollama
 STT_PROVIDER = os.environ.get('STT_PROVIDER', 'groq')   # groq | openai
-TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'edge')   # edge | gtts | elevenlabs
-# OCR : 'local' = Tesseract + Groq (gratuit, hors-ligne, défaut).
-# 'claude' = lecture par Claude vision (arabe/français/manuscrit), fallback Tesseract.
-OCR_PROVIDER = os.environ.get('OCR_PROVIDER', 'local')  # local | claude
+TTS_PROVIDER = os.environ.get('TTS_PROVIDER', 'azure')  # azure (défaut, fallback edge) | edge | gtts | elevenlabs
+# OCR : 'claude' = lecture par Claude vision (arabe/français/manuscrit, défaut,
+# fallback Tesseract). 'local' = Tesseract + Groq (gratuit, hors-ligne).
+OCR_PROVIDER = os.environ.get('OCR_PROVIDER', 'claude') # claude | local
 
-# Modèle STT Groq. Défaut = turbo (rapide, gratuit). Pour la précision max :
-# STT_MODEL=whisper-large-v3 (un peu plus lent, meilleure transcription darija).
-STT_MODEL = os.environ.get('STT_MODEL', 'whisper-large-v3-turbo')
+# Modèle STT Groq. Défaut = whisper-large-v3 (meilleure transcription darija,
+# gratuit sur Groq). STT_MODEL=whisper-large-v3-turbo si la vitesse prime.
+STT_MODEL = os.environ.get('STT_MODEL', 'whisper-large-v3')
 
 OLLAMA_URL   = os.environ.get('OLLAMA_URL',   'http://127.0.0.1:11434')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'mistral')
 
 # ── Clés API optionnelles (payant — laisser vide si non utilisé) ──────────────
+# Azure Speech — TTS officiel : même voix marocaine ar-MA-JamalNeural qu'edge-tts
+# (catalogue identique), API stable avec SLA. Tier F0 GRATUIT : 500K car./mois,
+# largement assez pour l'usage quotidien. portal.azure.com → « Speech service ».
+# Clé vide = fallback automatique edge-tts (même voix, non officiel).
+AZURE_SPEECH_KEY    = os.environ.get('AZURE_SPEECH_KEY',    '')
+AZURE_SPEECH_REGION = os.environ.get('AZURE_SPEECH_REGION', 'westeurope')
 ELEVENLABS_API_KEY  = os.environ.get('ELEVENLABS_API_KEY',  '')
 # Voice ID depuis lab.elevenlabs.io/voice-library — vide = voix par défaut (Adam)
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', '')
@@ -43,22 +53,26 @@ OPENAI_API_KEY      = os.environ.get('OPENAI_API_KEY',      '')
 # ── Claude (Anthropic) — cerveau vision+langage à la demande ──────────────────
 # Clé sur console.anthropic.com (format sk-ant-...). Vide = fallback Groq/local.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-# Modèles. Haiku 4.5 = défaut (multimodal, rapide, le moins cher : $1/$5 par 1M).
-# Pour la qualité max : CLAUDE_VISION_MODEL=claude-opus-4-8 ($5/$25 par 1M).
-CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-haiku-4-5')
+# Modèles — stratégie MIXTE par défaut (decisions.md 2026-07-06/08) :
+# Sonnet 5 partout à la demande (conversation, « شنو قدامي؟ », OCR — qualité,
+# $2/$10 par 1M en intro jusqu'au 31/08/2026), Haiku 4.5 pour la boucle
+# continue AutoScene ($1/$5 par 1M — 600 appels/h à 6s, le coût est là).
+# Opus 4-8 écarté pour la conversation : latence vocale trop pénalisante.
+CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-sonnet-5')
 CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
 # Modèle vision « haute qualité » pour les appels À LA DEMANDE (question vocale
-# « شنو قدامي؟ », lecture OCR) — réponse plus fine. La boucle auto continue, elle,
-# utilise CLAUDE_VISION_MODEL (moins cher). Défaut = même modèle (aucun surcoût
-# tant qu'on ne le règle pas sur sonnet/opus dans .env).
-CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', CLAUDE_VISION_MODEL)
+# « شنو قدامي؟ », lecture OCR) — réponse plus fine. La boucle auto continue,
+# elle, utilise CLAUDE_VISION_MODEL (moins cher).
+CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-sonnet-5')
 # Optimisation tokens : réponse parlée donc courte ; image redimensionnée +
 # compressée avant envoi (les tokens image montent avec la résolution).
 CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '150'))
 # La lecture OCR a besoin de plus de place qu'une description de scène
 # (rentre une lettre / notice entière) → plafond séparé, plus large.
 CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
-CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
+# 1568 = lettre/notice lisible sur le still HQ (~2400 tokens ≈ $0.005/lecture
+# en sonnet-5). Sans effet sur la boucle continue (source 640px, jamais agrandie).
+CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '1568'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 # Capture still HAUTE RÉSOLUTION (pleine résolution capteur) pour l'OCR et la
 # scène à la demande, via switch_mode (~0.5-1s, ponctuel). La boucle AutoScene
@@ -72,9 +86,9 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
 # La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-# Attention coût (≈1800 appels/h à 2s pour la scène, × 2 si OCR_PROVIDER=claude
+# Attention coût (≈600 appels/h à 6s pour la scène, × 2 si OCR_PROVIDER=claude
 # aussi) — voir CLAUDE.md.
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '2'))
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '6'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
 # Surchargeable via .env (cohérent avec le reste de la config).
@@ -93,7 +107,8 @@ AUDIO_MP3 = str(BASE_DIR / 'temp' / 'audio.mp3')
 AUDIO_WAV = str(BASE_DIR / 'temp' / 'audio.wav')
 
 # ── Text-to-Speech ────────────────────────────────────────────────────────────
-# Voix edge-tts marocaine (homme). Alternatives :
+# Voix marocaine (homme), utilisée par Azure Speech ET edge-tts (même catalogue).
+# Alternatives :
 #   ar-MA-MounaNeural (femme marocaine)
 #   ar-EG-SalmaNeural (femme égyptienne)
 EDGE_VOICE = 'ar-MA-JamalNeural'

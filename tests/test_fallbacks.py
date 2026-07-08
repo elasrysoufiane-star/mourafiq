@@ -9,6 +9,7 @@ Chaîne testée :
   providers.vision_ai → attrape → message vocal clair (YOLO retiré, plus de
                         détection locale de secours)
   providers.ocr  → attrape → fallback Tesseract
+  providers.tts  → Azure sans clé ou en panne → fallback edge-tts
 
 Fonctionne sur Windows sans matériel, sans SDK anthropic, sans clé API.
 """
@@ -146,6 +147,43 @@ def test_ocr_fallback_tesseract():
          providers_ocr._claude_ocr, providers_ocr._local_ocr) = anciens
 
 
+def test_tts_azure_sans_cle_fallback_edge():
+    """TTS_PROVIDER=azure sans AZURE_SPEECH_KEY → edge-tts, pas d'exception."""
+    from src.providers import tts as providers_tts
+    anciens = (providers_tts.TTS_PROVIDER, providers_tts.AZURE_SPEECH_KEY,
+               providers_tts._edge_synthesize)
+    appels = []
+    providers_tts.TTS_PROVIDER = 'azure'
+    providers_tts.AZURE_SPEECH_KEY = ''
+    providers_tts._edge_synthesize = lambda texte: appels.append(texte)
+    try:
+        providers_tts.synthesize('سلام')
+        assert appels == ['سلام'], 'azure sans clé doit basculer sur edge-tts'
+    finally:
+        (providers_tts.TTS_PROVIDER, providers_tts.AZURE_SPEECH_KEY,
+         providers_tts._edge_synthesize) = anciens
+
+
+def test_tts_azure_echec_fallback_edge():
+    """Azure en panne (réseau, quota) → edge-tts, pas d'exception."""
+    from src.providers import tts as providers_tts
+    anciens = (providers_tts.TTS_PROVIDER, providers_tts.AZURE_SPEECH_KEY,
+               providers_tts._azure_synthesize, providers_tts._edge_synthesize)
+    appels = []
+    def _casse(texte):
+        raise RuntimeError('panne (test)')
+    providers_tts.TTS_PROVIDER = 'azure'
+    providers_tts.AZURE_SPEECH_KEY = 'cle-test'
+    providers_tts._azure_synthesize = _casse
+    providers_tts._edge_synthesize = lambda texte: appels.append(texte)
+    try:
+        providers_tts.synthesize('سلام')
+        assert appels == ['سلام'], 'azure en panne doit basculer sur edge-tts'
+    finally:
+        (providers_tts.TTS_PROVIDER, providers_tts.AZURE_SPEECH_KEY,
+         providers_tts._azure_synthesize, providers_tts._edge_synthesize) = anciens
+
+
 if __name__ == '__main__':
     tests = [
         test_claude_darija_leve_claude_error,
@@ -155,6 +193,8 @@ if __name__ == '__main__':
         test_vision_fallback_message_clair,
         test_vision_sans_cle_message_clair,
         test_ocr_fallback_tesseract,
+        test_tts_azure_sans_cle_fallback_edge,
+        test_tts_azure_echec_fallback_edge,
     ]
     passed = 0
     failed = 0

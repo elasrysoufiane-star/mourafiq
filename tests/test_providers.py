@@ -17,7 +17,7 @@ from config.settings import (
 
 _VALID_AI     = {'groq', 'openai', 'claude', 'ollama'}
 _VALID_STT    = {'groq', 'openai'}
-_VALID_TTS    = {'edge', 'gtts', 'elevenlabs'}
+_VALID_TTS    = {'azure', 'edge', 'gtts', 'elevenlabs'}
 _VALID_OCR    = {'local', 'claude'}
 
 
@@ -51,13 +51,34 @@ def test_ocr_provider_type():
 def test_ocr_provider_valid():
     assert OCR_PROVIDER in _VALID_OCR, f"OCR_PROVIDER='{OCR_PROVIDER}' invalide (options: {_VALID_OCR})"
 
-def test_default_free_mode():
-    """Sans clé payante, les providers par défaut doivent être les gratuits."""
-    if not ELEVENLABS_API_KEY and not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
-        assert AI_PROVIDER        == 'groq',  "AI_PROVIDER par défaut doit être 'groq'"
-        assert STT_PROVIDER       == 'groq',  "STT_PROVIDER par défaut doit être 'groq'"
-        assert TTS_PROVIDER       == 'edge',  "TTS_PROVIDER par défaut doit être 'edge'"
-        assert OCR_PROVIDER       == 'local', "OCR_PROVIDER par défaut doit être 'local'"
+def test_default_quality_mode():
+    """Défauts = MEILLEURE QUALITÉ (2026-07-08) : le .env ne contient que les
+    clés API, la config vit dans settings.py. Sans clé, chaque provider retombe
+    en gratuit (testé dans test_fallbacks.py). Si ce test échoue, vérifier que
+    le .env local ne surcharge plus ces variables (il doit être clés-uniquement)."""
+    import os
+    import config.settings as settings
+    variables = ('AI_PROVIDER', 'STT_PROVIDER', 'TTS_PROVIDER', 'OCR_PROVIDER',
+                 'STT_MODEL', 'CLAUDE_TEXT_MODEL', 'CLAUDE_VISION_MODEL',
+                 'CLAUDE_VISION_MODEL_HQ', 'AUTO_DESCRIBE_INTERVAL',
+                 'CLAUDE_IMG_MAX_PX', 'AZURE_SPEECH_REGION')
+    sauvegarde = {v: os.environ.pop(v) for v in variables if v in os.environ}
+    try:
+        importlib.reload(settings)
+        assert settings.AI_PROVIDER  == 'claude', "AI_PROVIDER par défaut doit être 'claude'"
+        assert settings.STT_PROVIDER == 'groq',   "STT_PROVIDER par défaut doit être 'groq'"
+        assert settings.TTS_PROVIDER == 'azure',  "TTS_PROVIDER par défaut doit être 'azure'"
+        assert settings.OCR_PROVIDER == 'claude', "OCR_PROVIDER par défaut doit être 'claude'"
+        assert settings.STT_MODEL    == 'whisper-large-v3', "STT_MODEL par défaut doit être 'whisper-large-v3'"
+        assert settings.CLAUDE_TEXT_MODEL      == 'claude-sonnet-5'
+        assert settings.CLAUDE_VISION_MODEL    == 'claude-haiku-4-5'
+        assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-sonnet-5'
+        assert settings.AUTO_DESCRIBE_INTERVAL == 6
+        assert settings.CLAUDE_IMG_MAX_PX      == 1568
+        assert settings.AZURE_SPEECH_REGION    == 'westeurope'
+    finally:
+        os.environ.update(sauvegarde)
+        importlib.reload(settings)
 
 def test_elevenlabs_key_is_string():
     assert isinstance(ELEVENLABS_API_KEY, str)
@@ -108,7 +129,7 @@ if __name__ == '__main__':
         test_tts_provider_valid,
         test_ocr_provider_type,
         test_ocr_provider_valid,
-        test_default_free_mode,
+        test_default_quality_mode,
         test_elevenlabs_key_is_string,
         test_openai_key_is_string,
         test_anthropic_key_is_string,

@@ -6,6 +6,30 @@ date, décision, pourquoi, comment revenir dessus.
 
 ---
 
+## 2026-07-08 — Défauts = meilleure qualité, .env = clés API uniquement, TTS Azure
+
+**Décision** : les défauts de `config/settings.py` passent en « meilleure
+qualité » : `AI_PROVIDER=claude`, `OCR_PROVIDER=claude`, `TTS_PROVIDER=azure`
+(nouveau provider Azure Speech officiel — même voix `ar-MA-JamalNeural`
+qu'edge-tts, tier F0 gratuit 500K car./mois, REST via stdlib urllib),
+`STT_MODEL=whisper-large-v3`, `CLAUDE_TEXT_MODEL` et `CLAUDE_VISION_MODEL_HQ`
+= `claude-sonnet-5`, `CLAUDE_IMG_MAX_PX=1568`, `AUTO_DESCRIBE_INTERVAL=6`.
+Le `.env` ne contient plus QUE les clés (GROQ / ANTHROPIC / AZURE_SPEECH).
+
+**Pourquoi** : demande explicite (présentation du projet, coût accepté —
+« meilleur résultat pour l'assistance d'un malvoyant, sans se soucier des
+tokens »). L'ancienne règle « défauts gratuits dans le code » imposait un .env
+chargé de config ; inversée : la qualité est le défaut, le gratuit est le
+FALLBACK automatique (sans clé : claude→groq, azure→edge, OCR claude→Tesseract
+— testé dans test_fallbacks.py, l'app ne crashe jamais). Azure choisi pour le
+TTS car c'est la MÊME voix marocaine qu'edge-tts en API officielle stable —
+ElevenLabs écarté (pas de voix darija, 10× plus cher). La boucle continue
+reste Haiku (600 appels/h à 6 s) : Sonnet en continu ≈ $6/h sans gain vocal
+net ; Sonnet reste réservé à la demande.
+
+**Réversible via** : `.env` (toute variable surcharge son défaut) — profils
+eco/mixte/max dans `.claude/skills/tune-claude/SKILL.md`.
+
 ## 2026-07-06 — Modèles Claude : sonnet-5 partout à la demande, haiku en continu
 
 **Décision** : `CLAUDE_TEXT_MODEL=claude-sonnet-5`,

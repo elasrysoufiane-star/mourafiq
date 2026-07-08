@@ -5,8 +5,10 @@ description: Choisit et applique un profil coût/qualité pour l'API Anthropic d
 
 # Régler le profil Claude (coût / qualité / latence)
 
-Tout se règle dans `.env` — ne JAMAIS changer les défauts gratuits dans le code
-(règle projet n°1). Tarifs au 2026-07 (par 1M tokens in/out) :
+Tout se règle dans `.env` — chaque variable surcharge son défaut de
+`config/settings.py`. Depuis 2026-07-08 (voir `.claude/memory/decisions.md`),
+les défauts du code = profil **mixte** (qualité) et le `.env` ne contient que
+les clés API. Tarifs au 2026-07 (par 1M tokens in/out) :
 
 | Modèle | Prix | Rôle idéal ici |
 |---|---|---|
@@ -16,12 +18,12 @@ Tout se règle dans `.env` — ne JAMAIS changer les défauts gratuits dans le c
 
 ## Profils
 
-### mixte (RECOMMANDÉ — config actuelle)
+### mixte (RECOMMANDÉ — c'est le DÉFAUT du code, rien à mettre dans .env)
 ```env
 CLAUDE_TEXT_MODEL=claude-sonnet-5
 CLAUDE_VISION_MODEL=claude-haiku-4-5
 CLAUDE_VISION_MODEL_HQ=claude-sonnet-5
-AUTO_DESCRIBE_INTERVAL=2
+AUTO_DESCRIBE_INTERVAL=6
 ```
 ≈ $0.002/question vocale, ≈ $0.003/scène HQ. Latence bonne.
 
@@ -47,19 +49,20 @@ AUTO_DESCRIBE_INTERVAL=8
 - **`thinking`** : sur claude-sonnet-5 le thinking adaptatif est actif par
   défaut si le paramètre est omis → le code le désactive explicitement
   (`_THINKING_OFF` dans `src/ai/claude_client.py`). Ne pas retirer.
-- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (défaut `2`) — la
+- **Le levier de coût n°1 est `AUTO_DESCRIBE_INTERVAL`** (défaut `6`) — la
   boucle AutoScene tourne TOUJOURS (avec ou sans micro) et appelle **scène ET
-  OCR** à chaque cycle : 2 s ≈ 1800 appels/h pour la scène (toujours Claude,
-  YOLO retiré — pas d'option gratuite), jusqu'à ×2 si `OCR_PROVIDER=claude`
-  aussi, en plus des appels à la demande si micro. Monter l'intervalle, ou
+  OCR** à chaque cycle : 6 s ≈ 600 appels/h pour la scène (toujours Claude,
+  YOLO retiré — pas d'option gratuite), ×2 car `OCR_PROVIDER=claude` est le
+  défaut, en plus des appels à la demande si micro. Monter l'intervalle, ou
   repasser `OCR_PROVIDER=local` pour limiter la facture (la scène, elle, reste
   toujours payante).
 - **Image** : l'OCR et la scène à la demande capturent un still PLEINE
   RÉSOLUTION (`HQ_CAPTURE_ENABLED=1`, `src/vision/camera.py`), réduit à
-  `CLAUDE_IMG_MAX_PX` avant envoi → régler `CLAUDE_IMG_MAX_PX=1568` (lisible,
-  ~2400 tokens ≈ $0.005/lecture en sonnet-5). La boucle continue reste en
-  640×480 quelle que soit cette valeur (jamais agrandie → coût inchangé).
-- **STT/TTS restent hors Claude** : Whisper via Groq (gratuit) + edge-tts
-  (gratuit). `STT_MODEL=whisper-large-v3` = meilleure transcription darija.
+  `CLAUDE_IMG_MAX_PX` avant envoi — défaut `1568` (lisible, ~2400 tokens
+  ≈ $0.005/lecture en sonnet-5). La boucle continue reste en 640×480 quelle
+  que soit cette valeur (jamais agrandie → coût inchangé).
+- **STT/TTS restent hors Claude** : Whisper via Groq (gratuit, défaut
+  `whisper-large-v3` = meilleure transcription darija) + Azure Speech officiel
+  (défaut, tier F0 gratuit 500K car./mois, fallback edge-tts sans clé).
 - Vérifier le coût réel dans les logs : chaque appel imprime
   `Claude <tag> usage: in=... cache_read=... out=...`.
