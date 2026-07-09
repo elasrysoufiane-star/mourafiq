@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mourafiq-medina.png" alt="Mourafiq IA — مرافق : utilisateur portant la caméra pectorale Mourafiq dans une médina marocaine" width="100%">
+</p>
+
 # Mourafiq — مرافق
 ### Assistant IA pour personnes malvoyantes au Maroc
 **Raspberry Pi 4 | Darija marocaine | Master IT TAM UM5 2026**
