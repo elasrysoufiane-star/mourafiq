@@ -10,8 +10,6 @@
 pytesseract
 pyaudio
 webrtcvad
-pyserial
-pynmea2
 gtts
 edge-tts
 groq

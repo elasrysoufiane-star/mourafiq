@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import (
     EDGE_VOICE,
     TIMEOUT_ECOUTE,
-    GPS_BAUD,
     BASE_DIR,
     AUDIO_MP3,
     AUDIO_WAV,
@@ -40,12 +39,6 @@ def test_timeout_ecoute_approx_8s():
     """Le timeout doit correspondre environ à 8 secondes."""
     secondes_approx = TIMEOUT_ECOUTE * 1024 / 16000
     assert 6 <= secondes_approx <= 10, f"Timeout ≈ {secondes_approx:.1f}s (attendu ~8s)"
-
-
-def test_gps_baud_standard():
-    """Le baud GPS doit être une valeur standard."""
-    valeurs_standard = [4800, 9600, 19200, 38400, 115200]
-    assert GPS_BAUD in valeurs_standard, f"GPS_BAUD={GPS_BAUD} non standard"
 
 
 def test_base_dir_exists():
@@ -94,7 +87,6 @@ if __name__ == '__main__':
         test_edge_voice_moroccan,
         test_timeout_ecoute_positive,
         test_timeout_ecoute_approx_8s,
-        test_gps_baud_standard,
         test_base_dir_exists,
         test_paths_in_project,
         test_audio_mp3_extension,

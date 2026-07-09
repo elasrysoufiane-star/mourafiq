@@ -104,18 +104,6 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # × 2 si OCR_PROVIDER=claude aussi) — voir CLAUDE.md.
 AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '10'))
 
-# ── GPS ───────────────────────────────────────────────────────────────────────
-# Surchargeable via .env (cohérent avec le reste de la config).
-GPS_PORT = os.environ.get('GPS_PORT', '/dev/ttyS0')
-GPS_BAUD = int(os.environ.get('GPS_BAUD', '9600'))
-# Durée max de lecture des trames NMEA avant abandon (évite de bloquer le thread).
-GPS_READ_TIMEOUT = float(os.environ.get('GPS_READ_TIMEOUT', '3'))
-# Reverse geocoding : convertit lat/lon → adresse parlable (rue, quartier, ville)
-# via OpenStreetMap Nominatim (gratuit, pas de clé, nécessite Internet).
-# 0 → désactivé : on annonce alors les coordonnées brutes (comportement précédent).
-GEOCODE_ENABLED = os.environ.get('GEOCODE_ENABLED', '1') not in ('0', 'false', 'False', '')
-GEOCODE_TIMEOUT = float(os.environ.get('GEOCODE_TIMEOUT', '5'))
-
 # ── Logs runtime ──────────────────────────────────────────────────────────────
 # Capture TOUTE la sortie console (tous les print(), tous les threads) dans
 # logs/mourafiq_AAAAMMJJ_HHMMSS.log, horodatée + nom du thread — pour déboguer

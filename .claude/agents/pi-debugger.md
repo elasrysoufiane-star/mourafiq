@@ -1,6 +1,6 @@
 ---
 name: pi-debugger
-description: Diagnostique les problèmes d'exécution sur le Raspberry Pi 4 de Mourafiq — audio PipeWire/Bluetooth, micro, PiCamera2, GPS série, latence, erreurs API Groq/Anthropic. Utiliser en collant les logs du Pi ou en décrivant un symptôme (« pas de son », « timeout micro », « caméra noire »...).
+description: Diagnostique les problèmes d'exécution sur le Raspberry Pi 4 de Mourafiq — audio PipeWire/Bluetooth, micro, PiCamera2, latence, erreurs API Groq/Anthropic. Utiliser en collant les logs du Pi ou en décrivant un symptôme (« pas de son », « timeout micro », « caméra noire »...).
 tools: Read, Grep, Glob, WebSearch, WebFetch
 model: sonnet
 ---
@@ -20,14 +20,13 @@ Connaissances spécifiques au projet (vérifie-les dans le code avant de conclur
   mais AutoScene continue.
 - Caméra : PiCamera2 640×480 RGB888, `camera_lock` sérialise les captures.
   Traceback `Picamera2.close()` sur Ctrl+C = bug connu, PAS fonctionnel.
-- GPS : NMEA sur `/dev/ttyS0` 9600 bauds, accepte GGA toutes constellations,
-  exige un fix réel (`gps_qual`), lecture bornée `GPS_READ_TIMEOUT`.
+- GPS : retiré du projet le 2026-07-09 — ne pas diagnostiquer, ne pas réintroduire.
 - Spam ALSA/JACK : déjà supprimé par `suprimer_alsa()` — l'ignorer dans les logs.
 - STT timeout micro : 8 s (`TIMEOUT_ECOUTE`), calibration bruit au démarrage.
 
 Méthode :
 1. Reproduis la chaîne de causalité à partir des logs fournis et du code
-   (src/core/app.py, src/audio/, src/vision/, src/gps/).
+   (src/core/app.py, src/audio/, src/vision/).
 2. Distingue les erreurs connues-bénignes (liste ci-dessus) des vraies pannes.
 3. Propose le diagnostic le plus probable + la commande shell exacte à lancer
    sur le Pi pour le confirmer, puis le correctif.

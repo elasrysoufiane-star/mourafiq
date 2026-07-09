@@ -17,7 +17,6 @@ from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
 from src.vision.detector import mode_auto_scene
 from src.conversation.commands import mode_conversation
-from src.gps.location import init_gps, position_actuelle
 
 
 def _verifier_config():
@@ -72,10 +71,6 @@ def init():
     from groq import Groq
     state.groq_client = Groq(api_key=GROQ_API_KEY)
 
-    # GPS — connexion série optionnelle
-    print('Connexion GPS...')
-    state.gps_serial = init_gps()
-
     # Vérification micro → state.mic_ok pilote le lancement du thread conversation.
     print('Vérification micro...')
     import pyaudio
@@ -111,14 +106,7 @@ def main():
     init()
 
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
-           'باش نوصف ليك لي قدامك، "قرا ليا" للقراءة، ولا "وين أنا" للموقع. أنا معاك.')
-
-    if state.gps_serial:
-        pos = position_actuelle()
-        if pos:
-            parler(pos)
-        else:
-            parler('ماقدرتش نلقى موقعك دابا، خرج برا باش يتقى الإشارة')
+           'باش نوصف ليك لي قدامك، ولا "قرا ليا" للقراءة. أنا معاك.')
 
     actifs = []
 
@@ -145,6 +133,4 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print('Arrêt...')
-        if state.gps_serial:
-            state.gps_serial.close()
         state.camera.stop()
