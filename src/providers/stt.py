@@ -8,7 +8,9 @@ Providers supportés :
 
 Le fichier WAV doit déjà exister (écrit par reconnaitre_voix() dans listener.py).
 """
+import socket
 import time
+import urllib.error
 
 from config.settings import STT_PROVIDER, STT_MODEL, OPENAI_API_KEY, AUDIO_WAV
 
@@ -17,6 +19,9 @@ from config.settings import STT_PROVIDER, STT_MODEL, OPENAI_API_KEY, AUDIO_WAV
 # le contenu du prompt (hallucination), ce qui fabrique de fausses commandes.
 _DARIJA_PROMPT = 'تسجيل صوتي بالدارجة المغربية.'
 
+_NETWORK_ERRORS = (socket.gaierror, ConnectionError, TimeoutError, OSError,
+                    urllib.error.URLError)
+
 
 def transcribe() -> str:
     """Transcrit AUDIO_WAV via le provider STT configuré. Retourne '' si erreur."""
@@ -24,7 +29,16 @@ def transcribe() -> str:
         if not OPENAI_API_KEY:
             print('OPENAI_API_KEY manquant — fallback Groq STT')
         else:
-            return _openai_transcribe()
+            try:
+                return _openai_transcribe()
+            except _NETWORK_ERRORS as e:
+                print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback Groq STT: {e}')
+            except Exception as e:
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback Groq STT: {e}')
+                else:
+                    print(f'Erreur GPT-4o STT: {e}')
+                    return ''
     return _groq_transcribe()
 
 
@@ -55,5 +69,5 @@ def _groq_transcribe() -> str:
 
 
 def _openai_transcribe() -> str:
-    print('OpenAI STT provider: non encore implémenté — fallback Groq')
-    return _groq_transcribe()
+    from src.ai.openai_client import gpt4o_transcribe
+    return gpt4o_transcribe(AUDIO_WAV)

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mourafiq-medina.png" alt="Mourafiq IA — مرافق : utilisateur portant la caméra pectorale Mourafiq dans une médina marocaine" width="100%">
+</p>
+
 # Mourafiq — مرافق
 ### Assistant IA pour personnes malvoyantes au Maroc
 **Raspberry Pi 4 | Darija marocaine | Master IT TAM UM5 2026**
@@ -13,7 +17,6 @@ Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes
 - Lecture de texte arabe et français (Tesseract OCR)
 - Reconnaissance vocale arabe (Groq Whisper)
 - Réponses en darija (Groq LLaMA 3.1)
-- Navigation GPS avec instructions vocales
 - Sortie audio Bluetooth (edge-tts + mpg123 + PipeWire)
 
 ---
@@ -37,8 +40,6 @@ mourafiq/
 │   │   └── translations.py    # Dict YOLO class → phrase darija
 │   ├── ocr/
 │   │   └── reader.py          # lire_texte() — Tesseract ara+fra
-│   ├── gps/
-│   │   └── location.py        # get_gps(), naviguer()
 │   ├── ai/
 │   │   └── groq_client.py     # groq_darija() — LLaMA 3.1
 │   └── conversation/
@@ -115,11 +116,6 @@ python3 main.py
 |---|---|
 | `شنو قدامي` / `شوف` / `وصف` | Décrit les objets visibles |
 | `قرا ليا` / `اقرأ` | Lit le texte (OCR) |
-| `وين أنا` / `فاين أنا` | Position GPS actuelle |
-| `ودي للصيدلية` | Navigation vers la pharmacie |
-| `ودي للسبيطار` | Navigation vers l'hôpital |
-| `ودي للجامع` | Navigation vers la mosquée |
-| `ودي للمحطة` | Navigation vers la gare |
 | `عاونني` / `مساعدة` | Liste les commandes |
 | `وقف` / `بارك` / `سلام` | Arrête l'assistant |
 
@@ -179,7 +175,6 @@ cp .env.example .env
 | Fallback TTS | gTTS | Gratuit |
 | Détection objets | YOLOv8n (local) | Gratuit |
 | OCR | Tesseract (local) | Gratuit |
-| GPS | NMEA série (local) | Gratuit |
 
 ### Mode démo (ElevenLabs TTS)
 

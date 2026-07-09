@@ -6,18 +6,26 @@ Providers supportés :
   edge       — edge-tts ar-MA-JamalNeural (défaut, gratuit)
   gtts       — Google TTS arabe (fallback gratuit)
   elevenlabs — ElevenLabs multilingual v2 (payant, mode démo)
+  openai     — OpenAI TTS (payant, pas de voix darija dédiée)
 
 Ordre de fallback automatique si provider indisponible :
   elevenlabs → edge → gtts
+  openai (réseau/clé absente) → edge → gtts
 """
+import socket
 import subprocess
 import asyncio
+import urllib.error
 
 from config.settings import (
     TTS_PROVIDER,
     ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
+    OPENAI_API_KEY,
     AUDIO_MP3, EDGE_VOICE,
 )
+
+_NETWORK_ERRORS = (socket.gaierror, ConnectionError, TimeoutError, OSError,
+                    urllib.error.URLError)
 
 try:
     import edge_tts
@@ -46,6 +54,23 @@ def synthesize(texte: str) -> None:
                 _edge_synthesize(texte)
     elif TTS_PROVIDER == 'gtts':
         _gtts_synthesize(texte)
+    elif TTS_PROVIDER == 'openai':
+        if not OPENAI_API_KEY:
+            print('OPENAI_API_KEY manquant — fallback edge-tts')
+            _edge_synthesize(texte)
+        else:
+            try:
+                _openai_synthesize(texte)
+            except _NETWORK_ERRORS as e:
+                print(f'OpenAI TTS inaccessible (pas d\'Internet ?) — fallback edge-tts: {e}')
+                _edge_synthesize(texte)
+            except Exception as e:
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'OpenAI TTS inaccessible (pas d\'Internet ?) — fallback edge-tts: {e}')
+                    _edge_synthesize(texte)
+                else:
+                    print(f'OpenAI TTS échoué ({e}) — fallback edge-tts')
+                    _edge_synthesize(texte)
     else:  # edge (défaut)
         _edge_synthesize(texte)
 
@@ -74,6 +99,12 @@ def _gtts_synthesize(texte: str) -> None:
         except Exception as e:
             print(f'gTTS échoué: {e}')
     print('Aucun moteur TTS disponible !')
+
+
+def _openai_synthesize(texte: str) -> None:
+    from src.ai.openai_client import gpt4o_tts
+    gpt4o_tts(texte, AUDIO_MP3)
+    subprocess.run(['mpg123', '-q', AUDIO_MP3], check=False)
 
 
 def _elevenlabs_synthesize(texte: str) -> None:

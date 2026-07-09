@@ -10,12 +10,11 @@
 ultralytics
 pytesseract
 pyaudio
-pyserial
-pynmea2
 gtts
 edge-tts
 groq
 anthropic
+openai
 pillow
 numpy
 python-dotenv

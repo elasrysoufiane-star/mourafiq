@@ -53,23 +53,31 @@ CLAUDE_IMG_MAX_PX  = int(os.environ.get('CLAUDE_IMG_MAX_PX',  '768'))
 CLAUDE_IMG_QUALITY = int(os.environ.get('CLAUDE_IMG_QUALITY', '70'))
 # Anti double-appel : réutilise la dernière description si < N secondes.
 VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
+
+# ── OpenAI (GPT-4o) — cerveau complet alternatif (conversation/vision/OCR/STT/TTS) ──
+# Clé sur platform.openai.com (format sk-...). Vide = fallback Groq/local automatique.
+# Activer via .env : AI_PROVIDER=openai, VISION_AI_PROVIDER=openai,
+# OCR_PROVIDER=openai, STT_PROVIDER=openai, TTS_PROVIDER=openai.
+OPENAI_TEXT_MODEL   = os.environ.get('OPENAI_TEXT_MODEL',   'gpt-4o-mini')
+OPENAI_VISION_MODEL = os.environ.get('OPENAI_VISION_MODEL', 'gpt-4o-mini')
+OPENAI_STT_MODEL    = os.environ.get('OPENAI_STT_MODEL',    'whisper-1')
+OPENAI_TTS_MODEL    = os.environ.get('OPENAI_TTS_MODEL',    'tts-1')
+# Voix TTS OpenAI : alloy, echo, fable, onyx, nova, shimmer (pas de voix darija
+# dédiée — accent neutre/anglophone sur l'arabe, qualité correcte).
+OPENAI_TTS_VOICE    = os.environ.get('OPENAI_TTS_VOICE',    'onyx')
+OPENAI_MAX_TOKENS   = int(os.environ.get('OPENAI_MAX_TOKENS',  '150'))
+OPENAI_IMG_MAX_PX   = int(os.environ.get('OPENAI_IMG_MAX_PX',  '768'))
+OPENAI_IMG_QUALITY  = int(os.environ.get('OPENAI_IMG_QUALITY', '70'))
+
+# Provider OCR — 'local' = Tesseract (gratuit, défaut). 'openai' = lecture via
+# GPT-4o vision (payant). Fallback automatique vers Tesseract si pas d'Internet
+# ou clé absente.
+OCR_PROVIDER = os.environ.get('OCR_PROVIDER', 'local')  # local | openai
 # Description automatique de scène en mode SANS MICRO (pas de commande vocale).
 # Toutes les N secondes : capture → describe_scene() → parle. 0 = désactivé.
 # Pour utiliser Claude ici : VISION_AI_PROVIDER=claude + ANTHROPIC_API_KEY.
 # Attention coût si provider=claude (≈720 appels/h à 5s) — voir CLAUDE.md.
 AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '5'))
-
-# ── GPS ───────────────────────────────────────────────────────────────────────
-# Surchargeable via .env (cohérent avec le reste de la config).
-GPS_PORT = os.environ.get('GPS_PORT', '/dev/ttyS0')
-GPS_BAUD = int(os.environ.get('GPS_BAUD', '9600'))
-# Durée max de lecture des trames NMEA avant abandon (évite de bloquer le thread).
-GPS_READ_TIMEOUT = float(os.environ.get('GPS_READ_TIMEOUT', '3'))
-# Reverse geocoding : convertit lat/lon → adresse parlable (rue, quartier, ville)
-# via OpenStreetMap Nominatim (gratuit, pas de clé, nécessite Internet).
-# 0 → désactivé : on annonce alors les coordonnées brutes (comportement précédent).
-GEOCODE_ENABLED = os.environ.get('GEOCODE_ENABLED', '1') not in ('0', 'false', 'False', '')
-GEOCODE_TIMEOUT = float(os.environ.get('GEOCODE_TIMEOUT', '5'))
 
 # ── Chemins fichiers audio temporaires ───────────────────────────────────────
 AUDIO_MP3 = str(BASE_DIR / 'temp' / 'audio.mp3')

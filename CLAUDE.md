@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Mourafiq (مرافق)** is an AI-powered assistive device for visually impaired users in Morocco, running on a Raspberry Pi 4. It combines real-time object detection, OCR, GPS navigation, and voice interaction, responding entirely in Moroccan Darija Arabic.
+**Mourafiq (مرافق)** is an AI-powered assistive device for visually impaired users in Morocco, running on a Raspberry Pi 4. It combines real-time object detection, OCR, and voice interaction, responding entirely in Moroccan Darija Arabic. (Le GPS a été retiré du projet le 2026-07-09 — ne pas le réintroduire.)
 
 ## Running the Application
 
@@ -14,7 +14,7 @@ cd ~/mourafiq
 python3 main.py
 ```
 
-The app requires physical hardware: PiCamera2, microphone, speaker/headphones, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine without mocking.
+The app requires physical hardware: PiCamera2, microphone, and speaker/headphones. It cannot run on a development machine without mocking.
 
 ```bash
 echo 'export GROQ_API_KEY="gsk_..."' >> ~/.bashrc && source ~/.bashrc
@@ -48,8 +48,6 @@ mourafiq/
 │   │   └── translations.py         # Dict YOLO COCO → phrases darija
 │   ├── ocr/
 │   │   └── reader.py               # lire_texte() — Tesseract ara+fra
-│   ├── gps/
-│   │   └── location.py             # init_gps(), get_gps(), naviguer()
 │   ├── ai/
 │   │   ├── groq_client.py          # groq_darija() — llama-3.1-8b-instant
 │   │   └── claude_client.py        # claude_darija() + claude_describe_scene() — VLM
@@ -89,11 +87,10 @@ src.ai.claude_client ◄── config  (anthropic + PIL lazy)
 src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
 src.vision.detector  ◄── config, core.state, audio.speaker, vision.translations
 src.ocr.reader       ◄── core.state, audio.speaker, providers.ai
-src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
-src.conversation.intents ◄── core.state, audio.speaker, providers.ai, providers.vision_ai, ocr.reader, gps.location
+src.conversation.intents ◄── core.state, audio.speaker, providers.ai, providers.vision_ai, ocr.reader
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
 src.core.app         ◄── config, core.state, audio.speaker, audio.listener,
-                          vision.detector, conversation.commands, gps.location
+                          vision.detector, conversation.commands
 main.py              ◄── core.app
 ```
 
@@ -170,7 +167,7 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 **Règles :**
 1. Mode par défaut = gratuit (`groq` + `edge`). Ne jamais changer les défauts dans le code.
 2. Si clé payante absente → message clair + fallback gratuit automatique, jamais d'exception non gérée.
-3. YOLO, Tesseract OCR et GPS restent toujours locaux — jamais de provider cloud pour ces composants.
+3. YOLO et Tesseract OCR restent toujours locaux — jamais de provider cloud pour ces composants.
 4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
 5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire`) — rester testable sur Windows sans matériel.
 
@@ -184,11 +181,6 @@ Couche de routage — configurer via `.env` (défaut = tout gratuit).
 | `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix edge-tts |
 | `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
 | `MODEL_PATH` | `models/yolov8n.pt` | Chemin modèle YOLO |
-| `GPS_PORT` | `/dev/ttyS0` | Port série GPS (env-overridable) |
-| `GPS_BAUD` | `9600` | Baud GPS (env-overridable) |
-| `GPS_READ_TIMEOUT` | `3` | Durée max lecture NMEA (s) avant abandon |
-| `GEOCODE_ENABLED` | `1` | Reverse geocoding lat/lon → adresse (Nominatim) ; 0 = coords brutes |
-| `GEOCODE_TIMEOUT` | `5` | Timeout requête Nominatim (s) |
 | `AI_PROVIDER` | `groq` | Provider NLP (groq / claude / openai) |
 | `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
 | `STT_MODEL` | `whisper-large-v3-turbo` | Modèle Whisper Groq (`whisper-large-v3` pour +précision) |
@@ -267,16 +259,21 @@ pytest tests/ -v
 | Stop keyword | `سلام` (salut) → `سلامة` (adieu) : le salut n'arrête plus l'app | `src/conversation/intents.py` |
 | Bienvenue | Phrase d'accueil « مرافق » annonçant les commandes clés | `src/core/app.py` |
 | Log TTS | Affiche le moteur réel (edge/gtts/elevenlabs) | `src/providers/tts.py` |
-| GPS robustesse | `get_gps()` : accepte GGA toutes constellations (GNGGA/GPGGA…), vérifie `gps_qual` (fix réel), lecture bornée `GPS_READ_TIMEOUT`, trame corrompue ignorée ; `GPS_PORT/BAUD` env-overridable | `src/gps/location.py`, `config/settings.py` |
-| GPS reverse geocoding | `reverse_geocode()` (Nominatim OSM, stdlib `urllib`, cache ~11 m) → « vous êtes Boulevard X، quartier Y، ville ». `position_actuelle()` centralise « وين أنا » (adresse réelle, fallback coords). Fallback propre si pas d'Internet | `src/gps/location.py`, `src/conversation/intents.py` |
 | Mode vision seul | Sans micro : `init()` met `state.mic_ok=False`, saute la calibration, `main()` ne lance pas le thread conversation → plus de boucle « En attente de voix → Timeout 8s » | `src/core/app.py`, `src/core/state.py` |
 | Description auto (sans micro) | Thread `mode_auto_scene()` : sans micro, décrit la scène toutes les `AUTO_DESCRIBE_INTERVAL`s (`describe_scene()`→`parler()`). Claude si `VISION_AI_PROVIDER=claude`, sinon YOLO+Groq gratuit. Respecte `conversation_active` + cooldown | `src/vision/detector.py`, `src/core/app.py`, `config/settings.py` |
-
-**GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
 **Limite connue (matérielle) :** micro+voix sur le même canal **Bluetooth HFP 8 kHz** (FreeBuds SE 3) → audio dégradé des deux côtés, écho résiduel et erreurs Whisper darija possibles. Correctif définitif = **micro USB séparé** (FreeBuds en sortie A2DP). Le mot de réveil compense côté fiabilité.
 
 **Config « qualité max » (coût accepté), via `.env` uniquement :** `AI_PROVIDER=claude`, `VISION_AI_PROVIDER=claude`, `CLAUDE_VISION_MODEL=claude-opus-4-8` (ou `claude-sonnet-4-6`), `CLAUDE_IMG_MAX_PX=1568`, `STT_MODEL=whisper-large-v3`. TTS : rester en edge-tts (ElevenLabs gratuit ≈ 10 min/mois, insuffisant). Coût vision : ~0.001 $/scène (Haiku 768px) → ~0.02-0.03 $/scène (Opus 1568px), à la demande seulement.
+
+## Changements (2026-07-09) — retrait du GPS
+
+Le GPS a été **entièrement retiré** (décision projet : pas de navigation GPS).
+Supprimé : `src/gps/` (module complet), `state.gps_serial`, constantes `GPS_*` et
+`GEOCODE_*`, intentions vocales localisation/navigation (`KEYWORDS_GPS`,
+`KEYWORDS_NAVIGATE`, branches صيدلية/سبيطار/جامع/محطة), dépendances `pyserial` et
+`pynmea2`, tests GPS/navigation associés. Le README a reçu la photo du projet
+`assets/mourafiq-medina.png` (appareil MOURAFIQ IA porté dans la médina) en en-tête.
 
 ## Maintenance de ce fichier (économie de tokens)
 

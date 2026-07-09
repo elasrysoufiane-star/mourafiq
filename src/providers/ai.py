@@ -8,7 +8,8 @@ Providers supportés :
            présente ; ne bascule vers Groq qu'en cas d'erreur réseau/connexion
            (pas Internet) — pas pour une autre raison (quota, clé invalide…
            ces erreurs remontent normalement).
-  openai — GPT-4o-mini (futur, fallback groq si clé absente)
+  openai — GPT-4o-mini, réponses darija. Même logique que claude : tenté en
+           premier si clé présente, fallback Groq uniquement sur erreur réseau.
 
 Ne jamais importer groq_client/claude_client au niveau module — import lazy
 pour rester testable sur Windows sans matériel.
@@ -49,7 +50,16 @@ def get_ai_response(question: str) -> str:
         if not OPENAI_API_KEY:
             print('OPENAI_API_KEY manquant — fallback Groq')
         else:
-            return _openai_darija(question)
+            try:
+                return _openai_darija(question)
+            except _NETWORK_ERRORS as e:
+                print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback Groq: {e}')
+            except Exception as e:
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback Groq: {e}')
+                else:
+                    raise
+        return _groq_darija(question)
     return _groq_darija(question)
 
 
@@ -64,6 +74,5 @@ def _claude_darija(question: str) -> str:
 
 
 def _openai_darija(question: str) -> str:
-    print('OpenAI AI provider: non encore implémenté — fallback Groq')
-    from src.ai.groq_client import groq_darija
-    return groq_darija(question)
+    from src.ai.openai_client import gpt4o_darija
+    return gpt4o_darija(question)

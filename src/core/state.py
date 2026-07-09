@@ -17,7 +17,6 @@ conversation_active = threading.Event()
 camera      = None   # Picamera2
 model       = None   # ultralytics.YOLO
 groq_client = None   # groq.Groq
-gps_serial  = None   # serial.Serial
 
 # Micro disponible ? Mis à jour par app.init(). False → mode vision seul
 # (le thread conversation n'est pas lancé, pas de boucle de timeouts inutile).

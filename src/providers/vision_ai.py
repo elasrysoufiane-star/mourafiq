@@ -11,7 +11,7 @@ Règles :
   • Fallback automatique vers 'local' si ANTHROPIC_API_KEY absente — jamais d'exception.
   • Cooldown : réutilise la dernière description si rappelé en < VISION_COOLDOWN s
     (anti double-déclenchement STT + économie de tokens).
-  • YOLO/Tesseract/GPS restent toujours locaux — pas de cloud pour ces composants.
+  • YOLO/Tesseract restent toujours locaux — pas de cloud pour ces composants.
 
 Import claude_client en lazy (dans _claude_scene) — testable Windows sans clé.
 """
@@ -20,7 +20,8 @@ import time
 import urllib.error
 
 from config.settings import (
-    VISION_AI_PROVIDER, ANTHROPIC_API_KEY, VISION_COOLDOWN, CONF_SEUIL,
+    VISION_AI_PROVIDER, ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    VISION_COOLDOWN, CONF_SEUIL,
 )
 from src.core import state
 from src.providers.ai import get_ai_response
@@ -56,6 +57,22 @@ def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
                     desc = _local_scene(image)
                 else:
                     raise
+    elif VISION_AI_PROVIDER == 'openai':
+        if not OPENAI_API_KEY:
+            print('OPENAI_API_KEY manquant — fallback vision locale (YOLO)')
+            desc = _local_scene(image)
+        else:
+            try:
+                desc = _openai_scene(image, question)
+            except _NETWORK_ERRORS as e:
+                print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback YOLO: {e}')
+                desc = _local_scene(image)
+            except Exception as e:
+                if 'Connection' in type(e).__name__ or 'Timeout' in type(e).__name__:
+                    print(f'GPT-4o inaccessible (pas d\'Internet ?) — fallback YOLO: {e}')
+                    desc = _local_scene(image)
+                else:
+                    raise
     else:
         desc = _local_scene(image)
 
@@ -66,6 +83,11 @@ def describe_scene(image, question: str = 'شنو قدامي؟') -> str:
 def _claude_scene(image, question: str) -> str:
     from src.ai.claude_client import claude_describe_scene
     return claude_describe_scene(image, question)
+
+
+def _openai_scene(image, question: str) -> str:
+    from src.ai.openai_client import gpt4o_describe_scene
+    return gpt4o_describe_scene(image, question)
 
 
 def _local_scene(image) -> str:
