@@ -49,9 +49,13 @@ def mode_auto_scene() -> None:
         try:
             time.sleep(AUTO_DESCRIBE_INTERVAL)
 
-            # Ne pas capturer/parler par-dessus une sortie audio en cours.
-            if state.conversation_active.is_set():
-                continue
+            # ATTENDRE la fin d'une sortie audio en cours au lieu de sauter le
+            # cycle entier (l'ancien `continue` re-dormait AUTO_DESCRIBE_INTERVAL
+            # → cadence réelle 2×-4× plus lente que l'intervalle configuré dès
+            # que l'assistant parlait). La capture se fait APRÈS l'attente →
+            # image fraîche au moment où on peut effectivement parler.
+            while state.conversation_active.is_set():
+                time.sleep(0.2)
 
             img = capturer()  # flux 640×480 — boucle éco, pas de still HQ ici
 
