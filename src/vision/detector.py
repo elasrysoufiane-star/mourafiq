@@ -45,6 +45,12 @@ def mode_auto_scene() -> None:
     from src.providers.ocr import read_text
     print(f'Mode description auto démarré (chaque {AUTO_DESCRIBE_INTERVAL:.0f}s)...')
 
+    # Dédoublonnage : ne pas répéter la MÊME annonce à chaque cycle — scène
+    # inchangée, même panneau relu, ou message d'indisponibilité Claude
+    # (sinon « ماقدرتش نشوف دابا » en boucle infinie sans Internet).
+    derniere_desc = ''
+    dernier_texte = ''
+
     while True:
         try:
             time.sleep(AUTO_DESCRIBE_INTERVAL)
@@ -56,12 +62,15 @@ def mode_auto_scene() -> None:
             img = capturer()  # flux 640×480 — boucle éco, pas de still HQ ici
 
             desc = describe_scene(img)
-            if desc:
+            if desc and desc != derniere_desc:
                 parler(desc)
+            derniere_desc = desc
 
             texte = read_text(img, remember=False)
-            if texte and not any(s in texte for s in _OCR_SANS_RESULTAT):
+            if (texte and texte != dernier_texte
+                    and not any(s in texte for s in _OCR_SANS_RESULTAT)):
                 parler(texte)
+            dernier_texte = texte
 
         except Exception as e:
             print(f'Erreur description auto: {e}')
