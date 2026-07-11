@@ -105,8 +105,10 @@ def main():
 
     init()
 
-    parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
-           'باش نوصف ليك لي قدامك، ولا "قرا ليا" باش نقرا ليك المكتوب. أنا معاك.')
+    # Bienvenue COURTE (~5s) : identité + mission — la première description
+    # arrive ~5s après et démontre le reste (une longue phrase retardait la
+    # narration continue de ~15s).
+    parler('السلام عليكم، أنا مرافق، غادي نوصف ليك كلشي لي قدامك.')
 
     actifs = []
 
