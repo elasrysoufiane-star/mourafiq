@@ -21,6 +21,26 @@ KEYWORDS_STOP     = ['وقف', 'بارك', 'إيقاف', 'سلامة']
 # Mot de réveil + variantes probables de transcription Whisper (« مرافق »).
 KEYWORDS_WAKE     = ['مرافق', 'مرفق', 'مورافيق', 'مرافيق', 'مورافق']
 
+# Message d'aide — partagé entre le mot-clé AIDE et l'intention devinée.
+_MSG_AIDE = 'نقدر نعاونك بـ: شنو قدامي باش نوصف ليك، ولا قرا ليا باش نقرا ليك المكتوب'
+
+
+def _intention_claude(commande: str) -> str:
+    """Filet de sécurité STT : le micro déforme les mots (« شنو قدامي » →
+    « كثمانين ») — quand aucun mot-clé ne matche, Claude devine l'intention
+    probable par similarité phonétique. Retourne SCENE/LIRE/AIDE/CHAT ;
+    CHAT si clé absente ou échec (→ question libre, comportement historique).
+    Import lazy + jamais d'exception (règle projet)."""
+    from config.settings import ANTHROPIC_API_KEY
+    if not ANTHROPIC_API_KEY:
+        return 'CHAT'
+    try:
+        from src.ai.claude_client import claude_intention
+        return claude_intention(commande)
+    except Exception as e:
+        print(f'Classification intention échouée ({e}) — question libre')
+        return 'CHAT'
+
 
 def contient_wake(commande: str) -> bool:
     """True si la commande contient le mot de réveil (ou une variante)."""
@@ -54,15 +74,27 @@ def process_command(commande: str) -> bool:
 
     # Aide
     elif any(m in commande for m in KEYWORDS_HELP):
-        parler('نقدر نعاونك بـ: شنو قدامي باش نوصف ليك، ولا قرا ليا باش نقرا ليك المكتوب')
+        parler(_MSG_AIDE)
 
-    # Arrêt
+    # Arrêt — UNIQUEMENT par mot-clé exact (jamais deviné par Claude :
+    # une transcription déformée ne doit pas pouvoir éteindre l'assistant).
     elif any(m in commande for m in KEYWORDS_STOP):
         parler('مع السلامة بالتوفيق')
         return False
 
-    # Question libre → Groq LLaMA
+    # Aucun mot-clé — la transcription est peut-être DÉFORMÉE (micro bruité).
+    # Claude devine l'intention probable avant de traiter en question libre.
     else:
-        parler(get_ai_response(commande))
+        intention = _intention_claude(commande)
+        if intention == 'SCENE':
+            img = capturer(hq=True)
+            # Question par défaut (la transcription originale est du charabia).
+            parler(describe_scene(img, 'شنو قدامي؟', hq=True))
+        elif intention == 'LIRE':
+            lire_texte()
+        elif intention == 'AIDE':
+            parler(_MSG_AIDE)
+        else:  # CHAT — question libre
+            parler(get_ai_response(commande))
 
     return True

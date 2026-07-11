@@ -71,6 +71,11 @@ CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-opus-4
 # caractères, manuscrit, posologie). L'OCR de fond (boucle) reste sur
 # CLAUDE_VISION_MODEL (Sonnet) — voir src/providers/ocr.py.
 CLAUDE_OCR_MODEL = os.environ.get('CLAUDE_OCR_MODEL', 'claude-opus-4-8')
+# Classification d'INTENTION des transcriptions déformées (micro bruité :
+# « شنو قدامي » → « كثمانين ») : quand aucun mot-clé ne matche, Claude devine
+# l'intention probable (SCENE/LIRE/AIDE/CHAT) par similarité phonétique avant
+# de traiter en question libre. Haiku = le plus rapide (~1s, réponse d'un mot).
+CLAUDE_INTENT_MODEL = os.environ.get('CLAUDE_INTENT_MODEL', 'claude-haiku-4-5')
 # Budgets tokens SÉPARÉS par contexte (levier dialogue). À la demande + chat =
 # riche (l'utilisateur a posé une vraie question) ; boucle de fond = court
 # (narration brève qui ne monopolise pas la parole → moins d'écho/chevauchement).
@@ -98,14 +103,14 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# 15 = « YEUX PERMANENTS » avec de VRAIES fenêtres d'écoute (2026-07-11) : à 4s
-# la narration était quasi continue et le micro n'avait jamais de silence pour
-# capter l'utilisateur (sa capture était annulée par l'anti-écho dès que la
-# boucle reprenait). 15s de pause après chaque narration = ~15s pour parler.
-# En plus, la voix de l'utilisateur est PRIORITAIRE (state.user_speaking) : la
-# narration attend la fin de sa phrase + de la réponse. 0 = mode à la demande.
+# 8 = « YEUX PERMANENTS » réactifs (2026-07-11) : narration ~toutes les 18-20s
+# (parole ~10s + 8s de pause) — l'appareil reste vivant/interactif sans être
+# un moulin à paroles. La voix de l'utilisateur reste PRIORITAIRE
+# (state.user_speaking) : s'il parle pendant la pause, la narration attend la
+# fin de sa phrase ET de la réponse — il peut donc toujours interagir.
+# 0 = mode à la demande. Monter (15+) pour plus de silence entre narrations.
 # La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '15'))
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '8'))
 
 # ── Logs runtime ──────────────────────────────────────────────────────────────
 # Capture TOUTE la sortie console (tous les print(), tous les threads) dans

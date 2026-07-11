@@ -32,6 +32,7 @@ import time
 from config.settings import (
     ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_FALLBACK,
     CLAUDE_TEXT_MODEL, CLAUDE_VISION_MODEL, CLAUDE_OCR_MODEL,
+    CLAUDE_INTENT_MODEL,
     CLAUDE_MAX_TOKENS, CLAUDE_OCR_MAX_TOKENS,
     CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
 )
@@ -86,6 +87,22 @@ _OCR_SYSTEM_PROMPT = (
     '- إلا كانت لافطة ولا بلاكة ولا سومة: قول شنو مكتوب فيها.\n'
     '- إلا ماكاينش نص واضح، قول غير: "ماكاين حتى نص نقدر نقراه".'
     + _NO_MARKDOWN
+)
+
+# Prompt INTENTION — filet de sécurité STT : le micro (adaptateur jack→USB)
+# déforme les mots (« شنو قدامي » → « كثمانين »). Quand aucun mot-clé ne matche,
+# Claude devine l'intention PROBABLE par similarité phonétique/contexte, au
+# lieu de traiter le charabia comme une question libre. Réponse = UN mot.
+_INTENT_SYSTEM_PROMPT = (
+    'المستخدم مكفوف مغربي كيهضر بالدارجة عبر ميكروفون رديء: النص اللي كيجيك '
+    'من التعرف الصوتي غالبا مشوه ولا ناقص. مهمتك: حدد شنو غالبا بغا المستخدم، '
+    'حتى إلا كانت الكلمات مشوهة (قارن النطق والحروف المتشابهة).\n'
+    'جاوب بكلمة وحدة فقط من هاد اللائحة:\n'
+    'SCENE — بغا وصف اللي قدامو (أمثلة: شنو قدامي، شوف شنو كاين، وصف ليا)\n'
+    'LIRE — بغا تقرا ليه نص مكتوب/ورقة/دوا (أمثلة: قرا ليا، اقرأ)\n'
+    'AIDE — بغا يعرف شنو تقدر دير ليه (أمثلة: عاوني، مساعدة)\n'
+    'CHAT — سؤال حر ولا هضرة عادية واضحة\n'
+    'إلا ما كنتيش متأكد بين SCENE/LIRE/AIDE، جاوب CHAT.'
 )
 
 # Thinking désactivé explicitement : sur claude-sonnet-5 le thinking adaptatif
@@ -228,6 +245,29 @@ def claude_darija(question: str) -> str:
     print(f'Claude darija: {reponse}')
     memory.add_turn(question, reponse)
     return reponse
+
+
+def claude_intention(commande: str) -> str:
+    """Classifie une transcription darija BRUITÉE en intention probable.
+    Retourne 'SCENE' | 'LIRE' | 'AIDE' | 'CHAT' (CHAT par défaut si ambigu).
+    Modèle rapide (CLAUDE_INTENT_MODEL, haiku) + réponse d'un seul mot → ~1s.
+    JAMAIS d'intention ARRÊT ici (sécurité : l'arrêt exige le mot-clé exact).
+    Pas de mémoire de conversation (classification pure, pas un tour de dialogue).
+    ClaudeError si échec — l'appelant retombe sur la question libre."""
+    resp = _create(
+        tag='intent',
+        model=CLAUDE_INTENT_MODEL,
+        max_tokens=10,
+        thinking=_THINKING_OFF,
+        system=[{'type': 'text', 'text': _INTENT_SYSTEM_PROMPT}],
+        messages=[{'role': 'user', 'content': commande}],
+    )
+    mot = _extract_text(resp).upper()
+    for intention in ('SCENE', 'LIRE', 'AIDE'):
+        if intention in mot:
+            print(f'Intention devinée: {intention} (transcription: {commande})')
+            return intention
+    return 'CHAT'
 
 
 def _vision_call(image, question, system_prompt, model, max_tokens, tag,

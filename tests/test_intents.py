@@ -102,6 +102,65 @@ def test_wake_seul_donne_vide():
     assert retirer_wake('مرافق') == ''
 
 
+# ── Intention devinée par Claude (filet de sécurité STT bruitée) ──────────────
+# process_command référence ses dépendances via les globals du module →
+# on les remplace par des fakes, on appelle, on restaure. Aucun matériel.
+
+def _process_avec_fakes(commande, intention):
+    """Exécute process_command avec le classificateur et les actions simulés.
+    Retourne la liste des actions déclenchées."""
+    from src.conversation import intents
+    actions = []
+    anciens = (intents._intention_claude, intents.parler, intents.capturer,
+               intents.describe_scene, intents.lire_texte, intents.get_ai_response)
+    intents._intention_claude = lambda c: intention
+    intents.parler            = lambda t: actions.append(('parler', t))
+    intents.capturer          = lambda hq=False: 'fake-img'
+    intents.describe_scene    = lambda img, q, hq=False: actions.append(('scene', q)) or 'وصف'
+    intents.lire_texte        = lambda: actions.append(('lire', None))
+    intents.get_ai_response   = lambda c: actions.append(('chat', c)) or 'جواب'
+    try:
+        intents.process_command(commande)
+        return actions
+    finally:
+        (intents._intention_claude, intents.parler, intents.capturer,
+         intents.describe_scene, intents.lire_texte, intents.get_ai_response) = anciens
+
+
+def test_intention_devinee_scene():
+    """Transcription déformée (« كثمانين ») classée SCENE → description."""
+    actions = _process_avec_fakes('كثمانين', 'SCENE')
+    assert ('scene', 'شنو قدامي؟') in actions, 'doit décrire avec la question par défaut'
+
+
+def test_intention_devinee_lire():
+    actions = _process_avec_fakes('أرليا', 'LIRE')
+    assert ('lire', None) in actions, 'doit lancer la lecture OCR'
+
+
+def test_intention_devinee_chat_fallback():
+    """Classification CHAT (ou échec) → question libre, comportement historique."""
+    actions = _process_avec_fakes('الله يعطيك الصحة', 'CHAT')
+    assert any(a[0] == 'chat' for a in actions), 'doit partir en question libre'
+
+
+def test_intention_devinee_jamais_arret():
+    """SÉCURITÉ : même si le classificateur renvoyait n'importe quoi, l'arrêt
+    ne peut PAS être deviné — process_command doit retourner True (continuer)."""
+    from src.conversation import intents
+    anciens = (intents._intention_claude, intents.parler, intents.capturer,
+               intents.describe_scene, intents.lire_texte, intents.get_ai_response)
+    intents._intention_claude = lambda c: 'ARRET'   # valeur hors contrat
+    intents.parler            = lambda t: None
+    intents.get_ai_response   = lambda c: 'جواب'
+    try:
+        assert intents.process_command('بلا بلا') is True, \
+            "une intention inattendue doit retomber en CHAT, jamais arrêter"
+    finally:
+        (intents._intention_claude, intents.parler, intents.capturer,
+         intents.describe_scene, intents.lire_texte, intents.get_ai_response) = anciens
+
+
 if __name__ == '__main__':
     tests = [
         test_keywords_vision_non_vides,
@@ -122,6 +181,10 @@ if __name__ == '__main__':
         test_wake_absent,
         test_wake_retire_garde_commande,
         test_wake_seul_donne_vide,
+        test_intention_devinee_scene,
+        test_intention_devinee_lire,
+        test_intention_devinee_chat_fallback,
+        test_intention_devinee_jamais_arret,
     ]
     passed = 0
     failed = 0

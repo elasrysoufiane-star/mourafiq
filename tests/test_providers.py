@@ -60,7 +60,8 @@ def test_default_quality_mode():
     import config.settings as settings
     variables = ('AI_PROVIDER', 'STT_PROVIDER', 'TTS_PROVIDER', 'OCR_PROVIDER',
                  'STT_MODEL', 'CLAUDE_TEXT_MODEL', 'CLAUDE_VISION_MODEL',
-                 'CLAUDE_VISION_MODEL_HQ', 'CLAUDE_OCR_MODEL', 'AUTO_DESCRIBE_INTERVAL',
+                 'CLAUDE_VISION_MODEL_HQ', 'CLAUDE_OCR_MODEL', 'CLAUDE_INTENT_MODEL',
+                 'AUTO_DESCRIBE_INTERVAL',
                  'CLAUDE_IMG_MAX_PX', 'CLAUDE_IMG_QUALITY', 'CLAUDE_MAX_TOKENS',
                  'CLAUDE_SCENE_AUTO_MAX_TOKENS', 'CONV_MEMORY_TURNS', 'AZURE_SPEECH_REGION')
     sauvegarde = {v: os.environ.pop(v) for v in variables if v in os.environ}
@@ -75,7 +76,8 @@ def test_default_quality_mode():
         assert settings.CLAUDE_VISION_MODEL    == 'claude-sonnet-5', "boucle continue en Sonnet 5 (Opus trop lent)"
         assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-opus-4-8', "scène à la demande en Opus"
         assert settings.CLAUDE_OCR_MODEL       == 'claude-opus-4-8', "OCR à la demande en Opus"
-        assert settings.AUTO_DESCRIBE_INTERVAL == 15, "yeux permanents + fenêtres d'écoute réelles"
+        assert settings.AUTO_DESCRIBE_INTERVAL == 8, "yeux permanents réactifs (narration ~18-20s)"
+        assert settings.CLAUDE_INTENT_MODEL == 'claude-haiku-4-5', "classification intention rapide"
         assert settings.CLAUDE_MAX_TOKENS      == 300, "réponses à la demande riches"
         assert settings.CLAUDE_SCENE_AUTO_MAX_TOKENS == 80, "narration de fond courte"
         assert settings.CLAUDE_IMG_MAX_PX      == 1568
