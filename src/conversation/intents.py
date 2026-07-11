@@ -12,12 +12,18 @@ from src.ocr.reader import lire_texte
 
 # ── Mots-clés par intention ───────────────────────────────────────────────────
 # Exportés pour les tests unitaires
-KEYWORDS_VISION   = ['شنو', 'قدامي', 'واش', 'شوف', 'وصف']
+# PAS de 'شنو' ni 'واش' seuls : ce sont les mots interrogatifs de base de la
+# darija — ils matcheraient quasiment TOUTE question libre (« واش غادية طيح
+# الشتا؟ ») et déclencheraient la caméra au lieu du chat. Le chat garde le
+# suivi visuel via memory.get_last_image().
+KEYWORDS_VISION   = ['قدامي', 'شوف', 'وصف']
 KEYWORDS_OCR      = ['قرا', 'اقرأ', 'قراءة']
 KEYWORDS_HELP     = ['عاون', 'مساعدة', 'شنو تقدر']
 # 'سلامة' (avec ة) matche les adieux (بسلامة / مع السلامة) SANS matcher le
 # salut courant 'السلام عليكم' / 'سلام' → évite l'arrêt accidentel quand on salue.
-KEYWORDS_STOP     = ['وقف', 'بارك', 'إيقاف', 'سلامة']
+# 'باراكا'/'بركا' (« assez ») remplacent 'بارك' qui matchait les remerciements
+# courants ('الله يبارك فيك') et arrêtait l'app quand l'utilisateur dit merci.
+KEYWORDS_STOP     = ['وقف', 'باراكا', 'بركا', 'إيقاف', 'سلامة']
 # Mot de réveil + variantes probables de transcription Whisper (« مرافق »).
 KEYWORDS_WAKE     = ['مرافق', 'مرفق', 'مورافيق', 'مرافيق', 'مورافق']
 

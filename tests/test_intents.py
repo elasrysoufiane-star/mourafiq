@@ -55,6 +55,14 @@ def test_intention_vision_wasf():
 def test_intention_vision_shouf():
     assert _detecter_intention('شوف واش كاين') == 'vision'
 
+# 'شنو' / 'واش' seuls sont les interrogatifs de base de la darija — une question
+# libre qui les contient doit aller au CHAT, pas déclencher la caméra.
+def test_question_libre_avec_wash_pas_vision():
+    assert _detecter_intention('واش غادية طيح الشتا اليوم') == 'free'
+
+def test_question_libre_avec_shnou_pas_vision():
+    assert _detecter_intention('شنو هو الوقت دابا') == 'free'
+
 # ── Tests d'intention OCR ─────────────────────────────────────────────────────
 
 def test_intention_ocr_qra():
@@ -70,6 +78,14 @@ def test_intention_stop_wqf():
 
 def test_intention_stop_bsslama():
     assert _detecter_intention('بسلامة سلام') == 'stop'
+
+def test_intention_stop_baraka():
+    assert _detecter_intention('باراكا عليا') == 'stop'
+
+# Remercier ne doit PAS arrêter l'app : l'ancien mot-clé 'بارك' matchait
+# 'الله يبارك فيك' (merci courant) et coupait la conversation.
+def test_remerciement_pas_stop():
+    assert _detecter_intention('الله يبارك فيك') == 'free'
 
 # ── Test commande libre ───────────────────────────────────────────────────────
 
@@ -110,10 +126,14 @@ if __name__ == '__main__':
         test_intention_vision_shnou,
         test_intention_vision_wasf,
         test_intention_vision_shouf,
+        test_question_libre_avec_wash_pas_vision,
+        test_question_libre_avec_shnou_pas_vision,
         test_intention_ocr_qra,
         test_intention_ocr_iqra,
         test_intention_stop_wqf,
         test_intention_stop_bsslama,
+        test_intention_stop_baraka,
+        test_remerciement_pas_stop,
         test_intention_free,
         test_intention_free_unknown,
         test_intention_help,
