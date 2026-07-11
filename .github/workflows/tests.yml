@@ -1,0 +1,17 @@
+# Suite de tests — tourne sans matériel Pi par design (imports lazy).
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # portaudio requis pour compiler pyaudio (import optionnel mais listé).
+      - run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest tests/ -v

@@ -1,0 +1,2 @@
+# Dépendances de développement uniquement (tests) — pas besoin sur le Pi.
+pytest
