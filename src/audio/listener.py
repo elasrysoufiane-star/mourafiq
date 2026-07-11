@@ -60,6 +60,47 @@ _VAD_VOL_PLANCHER = 150
 
 _vad_logge = False  # log unique du moteur VAD actif au premier appel
 
+# ── Annonce vocale des pannes micro ──────────────────────────────────────────
+# L'utilisateur est NON-VOYANT : un message dans le log ne l'aide pas. Si le
+# micro tombe en panne (débranché, flux muet), on le PRÉVIENT à voix haute —
+# une seule fois par panne (anti-spam), et on annonce aussi le retour à la
+# normale pour qu'il sache qu'il peut reparler.
+_ECHECS_AVANT_ANNONCE = 3   # ~15s de problème consécutif avant d'annoncer
+_echecs_micro   = 0         # échecs consécutifs (ouverture ratée / flux muet)
+_panne_annoncee = False     # True = panne déjà annoncée vocalement
+
+_MSG_PANNE_MICRO  = 'كاين مشكل فالميكروفون، ما قادرش نسمعك دابا. تحقق واش الميكرو متصل مزيان.'
+_MSG_MICRO_RETOUR = 'الميكروفون رجع خدام، تقدر تهضر معايا دابا.'
+
+
+def _parler_securise(texte: str) -> None:
+    """parler() sans jamais lever (import lazy — pas de cycle, testable)."""
+    try:
+        from src.audio.speaker import parler
+        parler(texte)
+    except Exception as e:
+        print(f'Annonce vocale impossible: {e}')
+
+
+def _signaler_echec_micro() -> None:
+    """Un échec micro de plus. Au bout de _ECHECS_AVANT_ANNONCE échecs
+    consécutifs, prévenir l'utilisateur À VOIX HAUTE (une seule fois)."""
+    global _echecs_micro, _panne_annoncee
+    _echecs_micro += 1
+    if _echecs_micro >= _ECHECS_AVANT_ANNONCE and not _panne_annoncee:
+        _panne_annoncee = True
+        _parler_securise(_MSG_PANNE_MICRO)
+
+
+def _signaler_micro_ok() -> None:
+    """Le micro fonctionne (une écoute complète s'est déroulée normalement).
+    Si une panne avait été annoncée, dire vocalement que c'est réparé."""
+    global _echecs_micro, _panne_annoncee
+    if _panne_annoncee:
+        _parler_securise(_MSG_MICRO_RETOUR)
+    _echecs_micro = 0
+    _panne_annoncee = False
+
 
 def _frame_octets(rate: int) -> int:
     """Taille (octets) d'une trame webrtcvad de 20 ms au taux donné."""
@@ -266,7 +307,11 @@ def reconnaitre_voix() -> str:
         stream, rate = _ouvrir_micro(p)
     except RuntimeError as e:
         print(f'Micro indisponible ({e}) — nouvelle tentative dans 5s')
-        p.terminate()
+        try:
+            p.terminate()
+        except Exception:
+            pass
+        _signaler_echec_micro()   # au 3e échec : prévenir l'utilisateur à voix haute
         time.sleep(5)
         return ''
 
@@ -286,6 +331,7 @@ def reconnaitre_voix() -> str:
         if _lire_chunk(stream) is None:
             print('Micro muet (aucune donnée) — nouvelle tentative dans 5s')
             _fermer(stream, p)
+            _signaler_echec_micro()
             time.sleep(5)
             return ''
 
@@ -313,6 +359,7 @@ def reconnaitre_voix() -> str:
             # de geler le thread pour toujours (ancien comportement).
             print('Micro muet (plus aucune donnée) — réouverture au prochain cycle')
             _fermer(stream, p)
+            _signaler_echec_micro()
             return ''
         chunk  = np.frombuffer(data, dtype=np.int16)
         volume = np.abs(chunk).mean()
@@ -338,6 +385,9 @@ def reconnaitre_voix() -> str:
                 break
 
     _fermer(stream, p)
+    # Une écoute complète s'est déroulée (données reçues jusqu'au bout) → le
+    # micro fonctionne. Si une panne avait été annoncée, dire que c'est réparé.
+    _signaler_micro_ok()
 
     if not frames:
         return ''
