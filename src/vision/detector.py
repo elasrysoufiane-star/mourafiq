@@ -7,7 +7,7 @@ et read_text() parlent clairement de l'indisponibilité si Claude ne répond pas
 """
 import time
 
-from config.settings import AUTO_DESCRIBE_INTERVAL
+from config.settings import AUTO_DESCRIBE_INTERVAL, VOICE_PRIORITY
 from src.core import state
 from src.audio.speaker import parler
 from src.vision.camera import capturer
@@ -20,15 +20,19 @@ _OCR_SANS_RESULTAT = ('ماكاين حتى نص', 'ماقدرتش نقرا')
 
 
 def _attendre_parole_finie(max_s: float = 20.0) -> None:
-    """Attend que l'assistant ait fini de parler (conversation_active) ET que
-    l'utilisateur ait fini sa phrase + son traitement (user_speaking) — la voix
-    de l'utilisateur est PRIORITAIRE sur la narration de fond, sinon l'anti-écho
-    annulait sa capture dès que la boucle reprenait la parole (« il n'écoute
-    pas »). Borne de sécurité max_s : si un signal restait coincé (bug, bruit
-    continu classé voix), la narration reprend quand même."""
+    """Attend que l'assistant ait fini de parler (conversation_active — toujours,
+    ne jamais parler par-dessus sa propre voix), et — SEULEMENT si
+    VOICE_PRIORITY=1 — que l'utilisateur ait fini sa phrase (user_speaking).
+    Par défaut (VOICE_PRIORITY=0) la narration N'attend PAS le micro : la STT
+    est inutilisable sur le matériel actuel et le moindre bruit classé « voix »
+    par le VAD suspendait la narration → longs silences. Borne de sécurité
+    max_s : si un signal restait coincé, la narration reprend quand même."""
     deadline = time.monotonic() + max_s
-    while ((state.conversation_active.is_set() or state.user_speaking.is_set())
-           and time.monotonic() < deadline):
+    while time.monotonic() < deadline:
+        occupe = state.conversation_active.is_set() or (
+            VOICE_PRIORITY and state.user_speaking.is_set())
+        if not occupe:
+            return
         time.sleep(0.2)
 
 

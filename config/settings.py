@@ -103,14 +103,21 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# 8 = « YEUX PERMANENTS » réactifs (2026-07-11) : narration ~toutes les 18-20s
-# (parole ~10s + 8s de pause) — l'appareil reste vivant/interactif sans être
-# un moulin à paroles. La voix de l'utilisateur reste PRIORITAIRE
-# (state.user_speaking) : s'il parle pendant la pause, la narration attend la
-# fin de sa phrase ET de la réponse — il peut donc toujours interagir.
-# 0 = mode à la demande. Monter (15+) pour plus de silence entre narrations.
+# 2 = NARRATION QUASI CONTINUE (2026-07-11, demande explicite « trop de
+# silence ») : fin de parole → 2s → capture fraîche → ~3s d'appel Claude →
+# nouvelle description. Silence effectif entre deux narrations ≈ 5-7s max.
+# 0 = mode à la demande. Monter pour plus de silence entre narrations.
 # La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '8'))
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '2'))
+
+# La narration attend-elle que l'utilisateur finisse de parler (micro) ?
+# 0 (défaut) = NON : la STT est inutilisable sur le matériel actuel (micro
+# jack→USB) et le moindre bruit ambiant classé « voix » par le VAD suspendait
+# la narration → longs silences. La narration ne s'interrompt jamais pour le
+# micro ; le thread Conversation tourne quand même (mot de réveil = bonus).
+# 1 = redonner la priorité à la voix (state.user_speaking) — à réactiver quand
+# un vrai micro (casque TRRS / USB dédié) rendra la STT fiable.
+VOICE_PRIORITY = os.environ.get('VOICE_PRIORITY', '0') not in ('0', 'false', 'False', '')
 
 # ── Logs runtime ──────────────────────────────────────────────────────────────
 # Capture TOUTE la sortie console (tous les print(), tous les threads) dans
