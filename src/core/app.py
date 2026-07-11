@@ -125,6 +125,10 @@ def main():
         actifs.append('Conversation')
     else:
         print('AVERTISSEMENT: pas de micro détecté — écoute désactivée.')
+        # L'utilisateur est non-voyant : lui DIRE que le micro manque (un log
+        # ne l'aide pas) — sinon il parle dans le vide sans comprendre pourquoi.
+        parler('راه ما لقيتش الميكروفون، ما غاديش نقدر نسمعك. '
+               'تحقق واش الميكرو متصل مزيان وعاود شغل الجهاز.')
 
     print((' + '.join(actifs) if actifs else 'Aucun mode') + ' actif(s) !')
 

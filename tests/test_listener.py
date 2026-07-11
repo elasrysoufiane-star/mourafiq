@@ -151,6 +151,50 @@ def test_lire_chunk_muet_retourne_none():
     assert listener._lire_chunk(_FauxFlux(dispo=0), timeout_s=0.2) is None
 
 
+# ── Annonce vocale des pannes micro (utilisateur non-voyant) ──────────────────
+def test_annonce_panne_micro_une_fois_puis_retour():
+    """3 échecs consécutifs → UNE annonce vocale de panne (pas de spam) ;
+    une écoute réussie ensuite → annonce du retour + compteurs remis à zéro."""
+    annonces = []
+    anciens = (listener._parler_securise, listener._echecs_micro,
+               listener._panne_annoncee)
+    listener._parler_securise = lambda texte: annonces.append(texte)
+    listener._echecs_micro = 0
+    listener._panne_annoncee = False
+    try:
+        listener._signaler_echec_micro()
+        listener._signaler_echec_micro()
+        assert annonces == [], 'pas d\'annonce avant le 3e échec'
+        listener._signaler_echec_micro()
+        assert annonces == [listener._MSG_PANNE_MICRO], 'annonce au 3e échec'
+        listener._signaler_echec_micro()
+        assert len(annonces) == 1, 'une seule annonce par panne (anti-spam)'
+        listener._signaler_micro_ok()
+        assert annonces[-1] == listener._MSG_MICRO_RETOUR, 'annonce du retour'
+        assert listener._panne_annoncee is False
+        assert listener._echecs_micro == 0
+    finally:
+        (listener._parler_securise, listener._echecs_micro,
+         listener._panne_annoncee) = anciens
+
+
+def test_micro_ok_sans_panne_silencieux():
+    """Écoute réussie SANS panne préalable → aucune annonce (pas de bavardage)."""
+    annonces = []
+    anciens = (listener._parler_securise, listener._echecs_micro,
+               listener._panne_annoncee)
+    listener._parler_securise = lambda texte: annonces.append(texte)
+    listener._echecs_micro = 1   # un raté isolé, jamais annoncé
+    listener._panne_annoncee = False
+    try:
+        listener._signaler_micro_ok()
+        assert annonces == [], 'pas d\'annonce de retour sans panne annoncée'
+        assert listener._echecs_micro == 0, 'compteur remis à zéro'
+    finally:
+        (listener._parler_securise, listener._echecs_micro,
+         listener._panne_annoncee) = anciens
+
+
 if __name__ == '__main__':
     tests = [
         test_frames_20ms_decoupe,
@@ -168,6 +212,8 @@ if __name__ == '__main__':
         test_flux_actif_muet,
         test_lire_chunk_ok,
         test_lire_chunk_muet_retourne_none,
+        test_annonce_panne_micro_une_fois_puis_retour,
+        test_micro_ok_sans_panne_silencieux,
     ]
     passed = 0
     failed = 0
