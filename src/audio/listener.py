@@ -103,9 +103,56 @@ def _taux_natif(p, device):
         return None
 
 
+def _flux_actif(stream, attente_s: float = 1.2) -> bool:
+    """True si le flux délivre RÉELLEMENT des données. Certains flux s'ouvrent
+    sans erreur mais ne produisent jamais une trame (périphérique décroché par
+    une reconfiguration PipeWire — ex. connexion Bluetooth — ou taux non
+    supporté par le matériel) : stream.read() y bloquerait pour toujours.
+    Poll non-bloquant via get_read_available()."""
+    deadline = time.monotonic() + attente_s
+    while time.monotonic() < deadline:
+        try:
+            if stream.get_read_available() >= 1:
+                return True
+        except Exception:
+            return False
+        time.sleep(0.05)
+    return False
+
+
+def _lire_chunk(stream, timeout_s: float = 3.0):
+    """Lit 1024 samples SANS blocage infini : attend (non-bloquant) que les
+    données soient disponibles ; si le flux se tait > timeout_s (périphérique
+    décroché en cours de route), retourne None au lieu de geler le thread."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            if stream.get_read_available() >= 1024:
+                return stream.read(1024, exception_on_overflow=False)
+        except Exception:
+            return None
+        time.sleep(0.01)
+    return None
+
+
+def _fermer(stream, p) -> None:
+    """Ferme flux + PyAudio sans jamais lever (flux possiblement déjà mort)."""
+    try:
+        stream.stop_stream()
+        stream.close()
+    except Exception:
+        pass
+    try:
+        p.terminate()
+    except Exception:
+        pass
+
+
 def _ouvrir_micro(p):
     """Ouvre le flux micro de façon ROBUSTE. Essaie dans l'ordre :
-    (index configuré puis micro par défaut) × (16 kHz puis taux natif).
+    (index configuré puis micro par défaut) × (16 kHz puis taux natif),
+    et VÉRIFIE que des données arrivent vraiment (_flux_actif) — une ouverture
+    « réussie » sans données serait un gel garanti au premier read().
     Retourne (stream, rate). RuntimeError si aucun micro utilisable —
     l'appelant gère (pas de crash, règle projet)."""
     idx = _device_index()
@@ -121,12 +168,21 @@ def _ouvrir_micro(p):
                 stream = p.open(format=pyaudio.paInt16, channels=1,
                                 rate=rate, input=True, frames_per_buffer=1024,
                                 input_device_index=device)
-                if device != idx or rate != _RATE_CIBLE:
-                    nom = 'défaut système' if device is None else f'index {device}'
-                    print(f'Micro ouvert: {nom} @ {rate} Hz')
-                return stream, rate
             except Exception as e:
                 derniere_err = e
+                continue
+            if not _flux_actif(stream):
+                # Ouvert mais muet → read() bloquerait à l'infini. Suivant.
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+                derniere_err = RuntimeError(f'flux muet @ {rate} Hz')
+                continue
+            if device != idx or rate != _RATE_CIBLE:
+                nom = 'défaut système' if device is None else f'index {device}'
+                print(f'Micro ouvert: {nom} @ {rate} Hz')
+            return stream, rate
     raise RuntimeError(f'aucun micro utilisable ({derniere_err})')
 
 
@@ -167,12 +223,14 @@ def calibrer_micro() -> int:
 
     volumes = []
     for _ in range(max(1, int(2 * rate / 1024))):  # ~2 secondes au taux réel
-        data = stream.read(1024, exception_on_overflow=False)
-        vol  = np.abs(np.frombuffer(data, dtype=np.int16)).mean()
+        data = _lire_chunk(stream)
+        if data is None:
+            print('Micro muet pendant la calibration — seuil par défaut: 200')
+            _fermer(stream, p)
+            return 200
+        vol = np.abs(np.frombuffer(data, dtype=np.int16)).mean()
         volumes.append(vol)
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+    _fermer(stream, p)
 
     bruit = float(np.mean(volumes))
     seuil = max(150, int(bruit * 3))
@@ -225,7 +283,11 @@ def reconnaitre_voix() -> str:
 
     # Purge le tampon micro (écho résiduel du haut-parleur capté au démarrage).
     for _ in range(purge_chunks):
-        stream.read(1024, exception_on_overflow=False)
+        if _lire_chunk(stream) is None:
+            print('Micro muet (aucune donnée) — nouvelle tentative dans 5s')
+            _fermer(stream, p)
+            time.sleep(5)
+            return ''
 
     frames  = []
     silence = 0
@@ -241,12 +303,17 @@ def reconnaitre_voix() -> str:
         # ce test protège la durée de l'enregistrement (AutoScene parle souvent).
         if state.conversation_active.is_set():
             print("Capture annulée — l'assistant parle (anti-écho)")
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
+            _fermer(stream, p)
             return ''
 
-        data   = stream.read(1024, exception_on_overflow=False)
+        data = _lire_chunk(stream)
+        if data is None:
+            # Le flux s'est tu en cours de route (reconfiguration PipeWire /
+            # Bluetooth) → on ferme et on réessaie au prochain cycle, au lieu
+            # de geler le thread pour toujours (ancien comportement).
+            print('Micro muet (plus aucune donnée) — réouverture au prochain cycle')
+            _fermer(stream, p)
+            return ''
         chunk  = np.frombuffer(data, dtype=np.int16)
         volume = np.abs(chunk).mean()
 
@@ -270,9 +337,7 @@ def reconnaitre_voix() -> str:
                 print('Timeout écoute (8s sans voix)')
                 break
 
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+    _fermer(stream, p)
 
     if not frames:
         return ''

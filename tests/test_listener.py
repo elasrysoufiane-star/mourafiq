@@ -119,6 +119,38 @@ def test_est_voix_taux_non_supporte_fallback_seuil():
         state.VOL_SEUIL = ancien_seuil
 
 
+# ── Anti-gel : flux qui s'ouvre mais ne délivre rien ──────────────────────────
+class _FauxFlux:
+    """Simule un flux PyAudio : `dispo` = nb de samples disponibles à la lecture."""
+    def __init__(self, dispo):
+        self._dispo = dispo
+    def get_read_available(self):
+        return self._dispo
+    def read(self, n, exception_on_overflow=False):
+        return b'\x00' * (n * 2)
+
+
+def test_flux_actif_avec_donnees():
+    assert listener._flux_actif(_FauxFlux(dispo=1024), attente_s=0.2) is True
+
+
+def test_flux_actif_muet():
+    """Flux ouvert mais qui ne délivre JAMAIS de trame (périphérique décroché
+    par PipeWire/Bluetooth) → détecté muet au lieu de geler au premier read()."""
+    assert listener._flux_actif(_FauxFlux(dispo=0), attente_s=0.2) is False
+
+
+def test_lire_chunk_ok():
+    data = listener._lire_chunk(_FauxFlux(dispo=2048), timeout_s=0.2)
+    assert data is not None and len(data) == 2048
+
+
+def test_lire_chunk_muet_retourne_none():
+    """Flux qui se tait en cours de route → None (l'appelant ferme et réessaie)
+    au lieu d'un stream.read() bloqué pour toujours."""
+    assert listener._lire_chunk(_FauxFlux(dispo=0), timeout_s=0.2) is None
+
+
 if __name__ == '__main__':
     tests = [
         test_frames_20ms_decoupe,
@@ -132,6 +164,10 @@ if __name__ == '__main__':
         test_mic_device_index_config,
         test_frames_20ms_48k,
         test_est_voix_taux_non_supporte_fallback_seuil,
+        test_flux_actif_avec_donnees,
+        test_flux_actif_muet,
+        test_lire_chunk_ok,
+        test_lire_chunk_muet_retourne_none,
     ]
     passed = 0
     failed = 0
