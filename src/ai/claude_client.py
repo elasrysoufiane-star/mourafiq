@@ -30,7 +30,7 @@ import io
 import time
 
 from config.settings import (
-    ANTHROPIC_API_KEY,
+    ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_FALLBACK,
     CLAUDE_TEXT_MODEL, CLAUDE_VISION_MODEL, CLAUDE_OCR_MODEL,
     CLAUDE_MAX_TOKENS, CLAUDE_OCR_MAX_TOKENS,
     CLAUDE_IMG_MAX_PX, CLAUDE_IMG_QUALITY,
@@ -101,7 +101,8 @@ class ClaudeError(Exception):
     vocal clair pour la scène — pas de fallback local, YOLO retiré)."""
 
 
-_client = None
+# Un client anthropic par clé API (principale + secours), créé à la demande.
+_clients = {}
 
 # Timeout par requête. Le SDK anthropic défaut à 10 MIN (httpx) — sur un réseau
 # Pi dégradé/instable, un appel qui traîne bloque tout le cycle AutoScene
@@ -110,19 +111,50 @@ _client = None
 _TIMEOUT_S = 15.0
 
 
-def _get_client():
-    """Crée (une fois) le client anthropic. Import lazy → testable sans la lib.
-    max_retries=0 : les retries sont gérés explicitement dans claude_darija() /
-    _vision_call() (avec log + backoff visibles) — laisser le SDK retry en plus
-    en silence multiplierait le temps avant qu'une erreur ou un fallback ne
-    s'affiche/se parle."""
-    global _client
-    if _client is None:
+def _get_client(api_key: str):
+    """Client anthropic pour une clé donnée (créé une fois, mis en cache).
+    Import lazy → testable sans la lib. max_retries=0 : les retries sont gérés
+    dans _create() (log + backoff visibles) — le SDK ne doit pas retry en
+    silence, ça retarderait l'erreur/le fallback parlé."""
+    if api_key not in _clients:
         import anthropic
-        _client = anthropic.Anthropic(
-            api_key=ANTHROPIC_API_KEY, timeout=_TIMEOUT_S, max_retries=0,
+        _clients[api_key] = anthropic.Anthropic(
+            api_key=api_key, timeout=_TIMEOUT_S, max_retries=0,
         )
-    return _client
+    return _clients[api_key]
+
+
+def _api_keys() -> list:
+    """Clés à essayer dans l'ordre : PRINCIPALE puis SECOURS (si définie)."""
+    return [k for k in (ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_FALLBACK) if k]
+
+
+def _create(tag: str = '', **kwargs):
+    """messages.create avec DOUBLE robustesse :
+      1. retries backoff (429 / overloaded / 529) sur la MÊME clé ;
+      2. bascule sur la clé de SECOURS si la principale est épuisée/invalide/en panne.
+    ClaudeError si toutes les clés échouent → la couche providers bascule
+    (Groq pour le chat, Tesseract pour l'OCR, message vocal clair pour la scène)."""
+    keys = _api_keys()
+    if not keys:
+        raise ClaudeError('ANTHROPIC_API_KEY manquante')
+    derniere_err = None
+    for i, key in enumerate(keys):
+        for tentative in range(3):
+            try:
+                return _get_client(key).messages.create(**kwargs)
+            except Exception as e:
+                derniere_err = e
+                if _retryable(e) and tentative < 2:
+                    attente = 5 * (2 ** tentative)
+                    print(f'Quota Claude {tag}, attente {attente}s...')
+                    time.sleep(attente)
+                    continue
+                break  # échec non-retryable ou retries épuisés → clé suivante
+        if i < len(keys) - 1:
+            print(f'Clé Claude #{i + 1} en échec ({derniere_err}) — bascule sur la clé de secours')
+    print(f'Erreur Claude {tag}: {derniere_err}')
+    raise ClaudeError(str(derniere_err))
 
 
 def _encode_image(image) -> str:
@@ -167,44 +199,35 @@ def _retryable(e) -> bool:
 
 
 def claude_darija(question: str) -> str:
-    """Question texte → réponse darija courte. ClaudeError si échec définitif
-    (l'appelant — providers.ai — bascule alors sur Groq)."""
-    for tentative in range(3):
-        try:
-            # Suivi VISUEL : si une image a été vue à la demande, on la rattache
-            # à la question texte → « شنو كانت الحاجة الزرقاء؟ » marche même sans
-            # nouvelle capture. CLAUDE_TEXT_MODEL (Sonnet) est multimodal.
-            last_img = memory.get_last_image()
-            if last_img:
-                user_content = [
-                    {'type': 'image', 'source': {
-                        'type': 'base64', 'media_type': 'image/jpeg', 'data': last_img,
-                    }},
-                    {'type': 'text', 'text': question},
-                ]
-            else:
-                user_content = question
-            resp = _get_client().messages.create(
-                model=CLAUDE_TEXT_MODEL,
-                max_tokens=CLAUDE_MAX_TOKENS,
-                thinking=_THINKING_OFF,
-                system=_system_block(_CHAT_SYSTEM_PROMPT),
-                messages=memory.get_history() + [{'role': 'user', 'content': user_content}],
-            )
-            _log_usage(resp, 'texte')
-            reponse = _extract_text(resp)
-            print(f'Claude darija: {reponse}')
-            memory.add_turn(question, reponse)
-            return reponse
-        except Exception as e:
-            if _retryable(e) and tentative < 2:
-                attente = 5 * (2 ** tentative)
-                print(f'Quota Claude, attente {attente}s...')
-                time.sleep(attente)
-            else:
-                print(f'Erreur Claude: {e}')
-                raise ClaudeError(str(e)) from e
-    raise ClaudeError('tentatives épuisées')
+    """Question texte → réponse darija courte. Retries + bascule de clé API dans
+    _create(). ClaudeError si échec définitif (l'appelant — providers.ai —
+    bascule alors sur Groq)."""
+    # Suivi VISUEL : si une image a été vue à la demande, on la rattache à la
+    # question texte → « شنو كانت الحاجة الزرقاء؟ » marche même sans nouvelle
+    # capture. CLAUDE_TEXT_MODEL (Opus) est multimodal.
+    last_img = memory.get_last_image()
+    if last_img:
+        user_content = [
+            {'type': 'image', 'source': {
+                'type': 'base64', 'media_type': 'image/jpeg', 'data': last_img,
+            }},
+            {'type': 'text', 'text': question},
+        ]
+    else:
+        user_content = question
+    resp = _create(
+        tag='texte',
+        model=CLAUDE_TEXT_MODEL,
+        max_tokens=CLAUDE_MAX_TOKENS,
+        thinking=_THINKING_OFF,
+        system=_system_block(_CHAT_SYSTEM_PROMPT),
+        messages=memory.get_history() + [{'role': 'user', 'content': user_content}],
+    )
+    _log_usage(resp, 'texte')
+    reponse = _extract_text(resp)
+    print(f'Claude darija: {reponse}')
+    memory.add_turn(question, reponse)
+    return reponse
 
 
 def _vision_call(image, question, system_prompt, model, max_tokens, tag,
@@ -214,47 +237,33 @@ def _vision_call(image, question, system_prompt, model, max_tokens, tag,
     ClaudeError si échec définitif → la couche providers bascule (message vocal
     clair pour la scène, pas de fallback local — YOLO retiré ; Tesseract pour l'OCR).
 
-    remember=True → enregistre l'échange (question + réponse texte) dans la
-    mémoire de conversation pour les questions de suivi. L'IMAGE n'est jamais
-    mémorisée (coût + obsolète) ; en revanche l'historique TEXTE est préfixé à
-    l'appel pour donner le contexte (« وزيد على اليسار؟ », « زيدني تفاصيل »)."""
-    for tentative in range(3):
-        try:
-            data = _encode_image(image)
-            # À la demande (remember=True) → garder l'image pour un suivi visuel
-            # en chat (« وشنو كان حداها؟ »). La boucle de fond (remember=False) ne
-            # la garde pas (image obsolète en continu + on ne veut pas de suivi).
-            if remember:
-                memory.set_last_image(data)
-            resp = _get_client().messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                thinking=_THINKING_OFF,
-                system=_system_block(system_prompt),
-                messages=memory.get_history() + [{'role': 'user', 'content': [
-                    {'type': 'image', 'source': {
-                        'type': 'base64',
-                        'media_type': 'image/jpeg',
-                        'data': data,
-                    }},
-                    {'type': 'text', 'text': question},
-                ]}],
-            )
-            _log_usage(resp, tag)
-            reponse = _extract_text(resp)
-            print(f'Claude {tag}: {reponse}')
-            if remember:
-                memory.add_turn(question, reponse)
-            return reponse
-        except Exception as e:
-            if _retryable(e) and tentative < 2:
-                attente = 5 * (2 ** tentative)
-                print(f'Quota Claude {tag}, attente {attente}s...')
-                time.sleep(attente)
-            else:
-                print(f'Erreur Claude {tag}: {e}')
-                raise ClaudeError(str(e)) from e
-    raise ClaudeError('tentatives épuisées')
+    remember=True → enregistre l'échange (question + réponse) ET garde l'image
+    pour un suivi visuel en chat, UNIQUEMENT en cas de succès (un échec ne
+    pollue ni la mémoire ni la dernière image). L'historique reste TEXTE ;
+    l'image, elle, n'est gardée que comme « dernière vue » (memory.set_last_image)."""
+    data = _encode_image(image)
+    resp = _create(
+        tag=tag,
+        model=model,
+        max_tokens=max_tokens,
+        thinking=_THINKING_OFF,
+        system=_system_block(system_prompt),
+        messages=memory.get_history() + [{'role': 'user', 'content': [
+            {'type': 'image', 'source': {
+                'type': 'base64',
+                'media_type': 'image/jpeg',
+                'data': data,
+            }},
+            {'type': 'text', 'text': question},
+        ]}],
+    )
+    _log_usage(resp, tag)
+    reponse = _extract_text(resp)
+    print(f'Claude {tag}: {reponse}')
+    if remember:
+        memory.set_last_image(data)
+        memory.add_turn(question, reponse)
+    return reponse
 
 
 def claude_describe_scene(image, question: str = 'شنو قدامي؟', model: str = None,

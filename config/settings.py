@@ -53,19 +53,20 @@ OPENAI_API_KEY      = os.environ.get('OPENAI_API_KEY',      '')
 # ── Claude (Anthropic) — cerveau vision+langage à la demande ──────────────────
 # Clé sur console.anthropic.com (format sk-ant-...). Vide = fallback Groq/local.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-# Modèles — priorité EXPÉRIENCE (decisions.md 2026-07-06/08/08b). La latence
-# vocale est le vrai facteur limitant, pas le coût : on met la qualité là où
-# l'utilisateur attend peu (boucle de fond) ou là où la précision prime (OCR).
-# Sonnet 5 : conversation + « شنو قدامي؟ » à la demande + boucle continue.
-# Opus 4-8 : SEULEMENT l'OCR à la demande (lecture lettre/médicament — la
-# précision prime, l'utilisateur peut attendre 2s). Opus écarté de la
-# conversation et de la scène (trop lent → latence vocale pénalisante).
-CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-sonnet-5')
-# Boucle continue AutoScene : Sonnet 5 (au lieu de Haiku) — « yeux » permanents
-# bien plus fins. La latence compte moins (narration de fond, pas d'attente).
+# Clé de SECOURS : si la PRINCIPALE échoue (quota épuisé, clé invalide/expirée,
+# panne réseau/API), les appels Claude basculent AUTOMATIQUEMENT dessus, sans
+# rien couper (voir claude_client._create). Vide = pas de secours. 2ᵉ clé sk-ant-.
+ANTHROPIC_API_KEY_FALLBACK = os.environ.get('ANTHROPIC_API_KEY_FALLBACK', '')
+# Modèles — priorité QUALITÉ MAX (demande explicite, coût no-object, présentation).
+# Opus 4-8 sur TOUS les chemins À LA DEMANDE : conversation, « شنو قدامي؟ », OCR.
+# ⚠️ Opus = +latence vocale (quelques secondes de plus par réponse) — assumé pour
+# la qualité. La boucle CONTINUE reste Sonnet 5 (Opus impraticable à ~600 appels/h ;
+# de toute façon la boucle est OFF en mode démo, AUTO_DESCRIBE_INTERVAL=0).
+CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-opus-4-8')
+# Boucle continue AutoScene (si réactivée) : Sonnet 5 — Opus trop lent en continu.
 CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-sonnet-5')
-# Modèle vision « haute qualité » pour la scène À LA DEMANDE (« شنو قدامي؟ »).
-CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-sonnet-5')
+# Scène À LA DEMANDE (« شنو قدامي؟ ») : Opus 4-8 (qualité max).
+CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-opus-4-8')
 # OCR À LA DEMANDE (« قرا ليا ») : Opus 4-8 = lecture la plus précise (petits
 # caractères, manuscrit, posologie). L'OCR de fond (boucle) reste sur
 # CLAUDE_VISION_MODEL (Sonnet) — voir src/providers/ocr.py.
@@ -97,14 +98,21 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-# 10s (au lieu de 6) laisse un vrai silence entre deux descriptions → le micro
-# peut enfin entendre l'utilisateur (avant : narration quasi continue, aucune
-# fenêtre pour parler). Attention coût (≈360 appels/h à 10s pour la scène,
-# × 2 si OCR_PROVIDER=claude aussi) — voir CLAUDE.md.
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '10'))
+# 0 = MODE À LA DEMANDE (défaut depuis 2026-07-08, retenu pour la présentation) :
+# pas de narration automatique — l'assistant parle UNIQUEMENT quand l'utilisateur
+# demande (« شنو قدامي » / « قرا ليا »). Contrôle total du rythme, aucun risque de
+# parler par-dessus l'utilisateur ni de boucle d'écho. La scène nécessite
+# ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré). Mettre > 0 (ex. 10)
+# pour réactiver la description continue (« yeux permanents ») — voir CLAUDE.md.
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '0'))
 
 # ── GPS ───────────────────────────────────────────────────────────────────────
+# GPS DÉSACTIVÉ par défaut (2026-07-08) : matériel non fiable sur le Pi
+# (Permission denied /dev/ttyS0) + sans API de routage la navigation reste
+# approximative → écarté de la démo, qui se concentre sur la vision + lecture.
+# init() saute alors toute connexion série (aucune erreur, démarrage plus rapide).
+# GPS_ENABLED=1 dans .env pour réactiver (après `sudo usermod -aG dialout som`).
+GPS_ENABLED = os.environ.get('GPS_ENABLED', '0') not in ('0', 'false', 'False', '')
 # Surchargeable via .env (cohérent avec le reste de la config).
 GPS_PORT = os.environ.get('GPS_PORT', '/dev/ttyS0')
 GPS_BAUD = int(os.environ.get('GPS_BAUD', '9600'))

@@ -18,6 +18,7 @@ from config.settings import (
     HQ_CAPTURE_ENABLED,
     LOG_TO_FILE,
     LOG_KEEP_FILES,
+    GPS_ENABLED,
 )
 
 
@@ -82,6 +83,21 @@ def test_log_keep_files_positive():
     assert isinstance(LOG_KEEP_FILES, int) and LOG_KEEP_FILES >= 0
 
 
+def test_gps_disabled_by_default():
+    """GPS désactivé par défaut (démo vision/lecture, matériel /dev/ttyS0 KO)."""
+    import os
+    import importlib
+    import config.settings as s
+    sauve = os.environ.pop('GPS_ENABLED', None)
+    try:
+        importlib.reload(s)
+        assert s.GPS_ENABLED is False, "GPS_ENABLED doit être False par défaut"
+    finally:
+        if sauve is not None:
+            os.environ['GPS_ENABLED'] = sauve
+        importlib.reload(s)
+
+
 def test_camera_module_importable():
     """src.vision.camera doit s'importer sans matériel (Windows)."""
     from src.vision.camera import capturer
@@ -102,6 +118,7 @@ if __name__ == '__main__':
         test_hq_capture_enabled_bool,
         test_log_to_file_bool,
         test_log_keep_files_positive,
+        test_gps_disabled_by_default,
         test_camera_module_importable,
     ]
     passed = 0

@@ -9,7 +9,7 @@ import subprocess
 
 from config.settings import (
     GROQ_API_KEY, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
-    HQ_CAPTURE_ENABLED, LOG_TO_FILE, LOG_KEEP_FILES,
+    HQ_CAPTURE_ENABLED, LOG_TO_FILE, LOG_KEEP_FILES, GPS_ENABLED,
 )
 from src.core import state
 from src.core.logging_setup import setup_logging
@@ -72,9 +72,13 @@ def init():
     from groq import Groq
     state.groq_client = Groq(api_key=GROQ_API_KEY)
 
-    # GPS — connexion série optionnelle
-    print('Connexion GPS...')
-    state.gps_serial = init_gps()
+    # GPS — désactivé par défaut (GPS_ENABLED). On ne touche pas au port série
+    # (évite l'erreur Permission denied /dev/ttyS0 + démarrage plus rapide).
+    if GPS_ENABLED:
+        print('Connexion GPS...')
+        state.gps_serial = init_gps()
+    else:
+        state.gps_serial = None
 
     # Vérification micro → state.mic_ok pilote le lancement du thread conversation.
     print('Vérification micro...')
@@ -111,7 +115,7 @@ def main():
     init()
 
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
-           'باش نوصف ليك لي قدامك، "قرا ليا" للقراءة، ولا "وين أنا" للموقع. أنا معاك.')
+           'باش نوصف ليك لي قدامك، ولا "قرا ليا" باش نقرا ليك المكتوب. أنا معاك.')
 
     if state.gps_serial:
         pos = position_actuelle()

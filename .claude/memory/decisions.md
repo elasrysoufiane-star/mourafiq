@@ -6,6 +6,42 @@ date, décision, pourquoi, comment revenir dessus.
 
 ---
 
+## 2026-07-08 — Double clé Anthropic (bascule auto) + Opus à la demande
+
+**Décision** : (a) `ANTHROPIC_API_KEY_FALLBACK` — 2ᵉ clé utilisée
+automatiquement si la principale échoue (quota/invalide/panne), via
+`claude_client._create` (retries backoff + bascule de clé, centralisés) ;
+(b) modèles À LA DEMANDE en `claude-opus-4-8` (`CLAUDE_TEXT_MODEL`,
+`CLAUDE_VISION_MODEL_HQ`, `CLAUDE_OCR_MODEL`).
+
+**Pourquoi** : demande explicite — robustesse (une clé de secours pour la
+présentation, ne jamais tomber en panne de quota en direct) + qualité MAX
+assumée (« use Opus, don't care about tokens »). ⚠️ Opus = +latence vocale
+(quelques secondes/réponse) — accepté pour la qualité. La boucle CONTINUE reste
+Sonnet 5 (Opus impraticable à ~600 appels/h ; de toute façon OFF en mode démo).
+Contredit partiellement 2026-07-06 (« Opus écarté de la conversation pour la
+latence ») — l'utilisateur a tranché en faveur de la qualité, latence assumée.
+
+**Réversible via** : `.env` (`CLAUDE_TEXT_MODEL=claude-sonnet-5` etc. pour
+revenir à moins de latence).
+
+## 2026-07-08 — GPS désactivé + mode « à la demande » par défaut (présentation samedi)
+
+**Décision** : `GPS_ENABLED=0` (GPS coupé) et `AUTO_DESCRIBE_INTERVAL=0`
+(pas de narration automatique — l'assistant répond UNIQUEMENT sur commande
+vocale « شنو قدامي » / « قرا ليا »).
+
+**Pourquoi** : présentation le samedi 2026-07-11, l'utilisateur veut une démo
+maîtrisée. (1) GPS retiré du produit : matériel Pi non fiable (Permission
+denied /dev/ttyS0) + navigation approximative sans API de routage — écarté,
+`init()` ne touche plus au port série, « وين أنا » retiré de l'accueil/aide
+(code GPS gardé, dormant, réactivable `GPS_ENABLED=1`). (2) Mode à la demande :
+sur scène, le contrôle du rythme prime + supprime la boucle d'écho (le micro
+n'entend plus l'assistant puisqu'il ne parle que sur commande). Réactiver la
+description continue « yeux permanents » = `AUTO_DESCRIBE_INTERVAL=10`.
+
+**Réversible via** : `.env` (`GPS_ENABLED=1`, `AUTO_DESCRIBE_INTERVAL=10`).
+
 ## 2026-07-08b — Qualité dialogue/expérience (tokens no-object) : budgets séparés, Sonnet en continu, Opus OCR, suivi visuel
 
 **Décision** : (a) budgets tokens séparés — `CLAUDE_MAX_TOKENS=300` (à la

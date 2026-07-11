@@ -71,11 +71,11 @@ def test_default_quality_mode():
         assert settings.TTS_PROVIDER == 'azure',  "TTS_PROVIDER par défaut doit être 'azure'"
         assert settings.OCR_PROVIDER == 'claude', "OCR_PROVIDER par défaut doit être 'claude'"
         assert settings.STT_MODEL    == 'whisper-large-v3', "STT_MODEL par défaut doit être 'whisper-large-v3'"
-        assert settings.CLAUDE_TEXT_MODEL      == 'claude-sonnet-5'
-        assert settings.CLAUDE_VISION_MODEL    == 'claude-sonnet-5', "boucle continue en Sonnet 5"
-        assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-sonnet-5'
+        assert settings.CLAUDE_TEXT_MODEL      == 'claude-opus-4-8', "conversation en Opus (qualité max)"
+        assert settings.CLAUDE_VISION_MODEL    == 'claude-sonnet-5', "boucle continue en Sonnet 5 (Opus trop lent)"
+        assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-opus-4-8', "scène à la demande en Opus"
         assert settings.CLAUDE_OCR_MODEL       == 'claude-opus-4-8', "OCR à la demande en Opus"
-        assert settings.AUTO_DESCRIBE_INTERVAL == 10
+        assert settings.AUTO_DESCRIBE_INTERVAL == 0, "mode à la demande (démo)"
         assert settings.CLAUDE_MAX_TOKENS      == 300, "réponses à la demande riches"
         assert settings.CLAUDE_SCENE_AUTO_MAX_TOKENS == 80, "narration de fond courte"
         assert settings.CLAUDE_IMG_MAX_PX      == 1568

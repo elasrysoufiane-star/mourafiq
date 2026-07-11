@@ -36,16 +36,18 @@ class _FakeClient:
 
 
 def _avec_client_casse(fonction):
-    """Exécute `fonction` avec un client Claude qui échoue, puis restaure."""
-    ancien_client = claude_client._client
-    ancien_encode = claude_client._encode_image
-    claude_client._client = _FakeClient()
+    """Exécute `fonction` avec un client Claude qui échoue (toutes clés), puis
+    restaure. Simule aussi une clé pour que la boucle de _create() s'exécute."""
+    anciens = (claude_client._api_keys, claude_client._get_client,
+               claude_client._encode_image)
+    claude_client._api_keys = lambda: ['sk-ant-test']
+    claude_client._get_client = lambda key: _FakeClient()
     claude_client._encode_image = lambda image: 'fake-base64'
     try:
         return fonction()
     finally:
-        claude_client._client = ancien_client
-        claude_client._encode_image = ancien_encode
+        (claude_client._api_keys, claude_client._get_client,
+         claude_client._encode_image) = anciens
 
 
 def test_claude_darija_leve_claude_error():
@@ -79,6 +81,38 @@ def test_claude_ocr_leve_claude_error():
             return True
         return False
     assert _avec_client_casse(appel), 'claude_read_text doit lever ClaudeError'
+
+
+class _FakeResp:
+    """Réponse Claude minimale (content texte + usage) pour simuler un succès."""
+    def __init__(self, texte):
+        self.content = [type('B', (), {'type': 'text', 'text': texte})()]
+        self.usage = type('U', (), {'input_tokens': 1, 'output_tokens': 1})()
+
+
+class _ClientOK:
+    def __init__(self, texte):
+        self.messages = type('M', (), {'create': lambda _self, **kw: _FakeResp(texte)})()
+
+
+def test_key_failover_principale_ko_secours_ok():
+    """Clé PRINCIPALE en panne → bascule AUTOMATIQUE sur la clé de secours,
+    la réponse revient sans ClaudeError (l'utilisateur ne voit rien passer)."""
+    memory.reset()
+    anciens = (claude_client._api_keys, claude_client._get_client)
+
+    # Réponse en ASCII : le test vérifie la BASCULE de clé, pas l'affichage —
+    # évite un UnicodeEncodeError sur la console cp1252 de Windows (le print()
+    # d'arabe marche sur le Pi en UTF-8 + dans le fichier log).
+    def _client_pour(key):
+        return _FakeClient() if key == 'principale' else _ClientOK('reponse-du-secours')
+
+    claude_client._api_keys = lambda: ['principale', 'secours']
+    claude_client._get_client = _client_pour
+    try:
+        assert claude_client.claude_darija('salam') == 'reponse-du-secours'
+    finally:
+        (claude_client._api_keys, claude_client._get_client) = anciens
 
 
 def test_ai_fallback_groq():
@@ -189,6 +223,7 @@ if __name__ == '__main__':
         test_claude_darija_leve_claude_error,
         test_claude_scene_leve_claude_error,
         test_claude_ocr_leve_claude_error,
+        test_key_failover_principale_ko_secours_ok,
         test_ai_fallback_groq,
         test_vision_fallback_message_clair,
         test_vision_sans_cle_message_clair,

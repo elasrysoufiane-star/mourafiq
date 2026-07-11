@@ -74,7 +74,7 @@ def process_command(commande: str) -> bool:
 
     # Aide
     elif any(m in commande for m in KEYWORDS_HELP):
-        parler('نقدر نعاونك بـ: شنو قدامي، قرا ليا، وين أنا، ودي للصيدلية')
+        parler('نقدر نعاونك بـ: شنو قدامي باش نوصف ليك، ولا قرا ليا باش نقرا ليك المكتوب')
 
     # Arrêt
     elif any(m in commande for m in KEYWORDS_STOP):
