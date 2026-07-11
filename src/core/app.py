@@ -128,9 +128,11 @@ def main():
 
     print((' + '.join(actifs) if actifs else 'Aucun mode') + ' actif(s) !')
 
+    # Attend l'arrêt vocal (« وقف » → state.stop_event) ou Ctrl+C.
     try:
-        while True:
+        while not state.stop_event.is_set():
             time.sleep(1)
+        print('Arrêt vocal — extinction.')
     except KeyboardInterrupt:
         print('Arrêt...')
-        state.camera.stop()
+    state.camera.stop()

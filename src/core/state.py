@@ -13,6 +13,10 @@ audio_lock  = threading.Lock()   # sérialise tous les appels parler()
 # Il est activé uniquement pendant la sortie audio.
 conversation_active = threading.Event()
 
+# Arrêt demandé par la voix (« وقف » / « باراكا ») : mis par mode_conversation(),
+# attendu par app.main() → l'app entière s'arrête, pas seulement l'écoute.
+stop_event = threading.Event()
+
 # ── Objets matériels (initialisés par app.init()) ─────────────────────────────
 camera      = None   # Picamera2
 camera_still_cfg = None  # config still HQ (OCR / scène à la demande) — None = indisponible

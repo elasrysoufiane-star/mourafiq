@@ -50,6 +50,9 @@ def mode_conversation() -> None:
             continuer = process_command(commande)
 
             if not continuer:
+                # Arrêt vocal → toute l'app s'arrête (AutoScene compris),
+                # pas seulement l'écoute — voir app.main().
+                state.stop_event.set()
                 break
 
             # Rouvre la fenêtre de suivi après chaque commande exécutée.
