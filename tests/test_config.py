@@ -11,14 +11,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import (
     EDGE_VOICE,
     TIMEOUT_ECOUTE,
-    GPS_BAUD,
     BASE_DIR,
     AUDIO_MP3,
     AUDIO_WAV,
     HQ_CAPTURE_ENABLED,
     LOG_TO_FILE,
     LOG_KEEP_FILES,
-    GPS_ENABLED,
 )
 
 
@@ -41,12 +39,6 @@ def test_timeout_ecoute_approx_8s():
     """Le timeout doit correspondre environ à 8 secondes."""
     secondes_approx = TIMEOUT_ECOUTE * 1024 / 16000
     assert 6 <= secondes_approx <= 10, f"Timeout ≈ {secondes_approx:.1f}s (attendu ~8s)"
-
-
-def test_gps_baud_standard():
-    """Le baud GPS doit être une valeur standard."""
-    valeurs_standard = [4800, 9600, 19200, 38400, 115200]
-    assert GPS_BAUD in valeurs_standard, f"GPS_BAUD={GPS_BAUD} non standard"
 
 
 def test_base_dir_exists():
@@ -83,19 +75,12 @@ def test_log_keep_files_positive():
     assert isinstance(LOG_KEEP_FILES, int) and LOG_KEEP_FILES >= 0
 
 
-def test_gps_disabled_by_default():
-    """GPS désactivé par défaut (démo vision/lecture, matériel /dev/ttyS0 KO)."""
-    import os
-    import importlib
+def test_gps_fully_removed():
+    """Le GPS a été RETIRÉ du projet (2026-07-09) — vérifier qu'aucune constante
+    GPS ne réapparaît dans la config (ne pas le réintroduire)."""
     import config.settings as s
-    sauve = os.environ.pop('GPS_ENABLED', None)
-    try:
-        importlib.reload(s)
-        assert s.GPS_ENABLED is False, "GPS_ENABLED doit être False par défaut"
-    finally:
-        if sauve is not None:
-            os.environ['GPS_ENABLED'] = sauve
-        importlib.reload(s)
+    for attr in ('GPS_ENABLED', 'GPS_PORT', 'GPS_BAUD', 'GEOCODE_ENABLED'):
+        assert not hasattr(s, attr), f"{attr} ne doit plus exister (GPS retiré)"
 
 
 def test_camera_module_importable():
@@ -110,7 +95,6 @@ if __name__ == '__main__':
         test_edge_voice_moroccan,
         test_timeout_ecoute_positive,
         test_timeout_ecoute_approx_8s,
-        test_gps_baud_standard,
         test_base_dir_exists,
         test_paths_in_project,
         test_audio_mp3_extension,
@@ -118,7 +102,7 @@ if __name__ == '__main__':
         test_hq_capture_enabled_bool,
         test_log_to_file_bool,
         test_log_keep_files_positive,
-        test_gps_disabled_by_default,
+        test_gps_fully_removed,
         test_camera_module_importable,
     ]
     passed = 0

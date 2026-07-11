@@ -9,7 +9,7 @@ import subprocess
 
 from config.settings import (
     GROQ_API_KEY, BASE_DIR, AUTO_DESCRIBE_INTERVAL,
-    HQ_CAPTURE_ENABLED, LOG_TO_FILE, LOG_KEEP_FILES, GPS_ENABLED,
+    HQ_CAPTURE_ENABLED, LOG_TO_FILE, LOG_KEEP_FILES,
 )
 from src.core import state
 from src.core.logging_setup import setup_logging
@@ -17,7 +17,6 @@ from src.audio.speaker import parler
 from src.audio.listener import suprimer_alsa, calibrer_micro
 from src.vision.detector import mode_auto_scene
 from src.conversation.commands import mode_conversation
-from src.gps.location import init_gps, position_actuelle
 
 
 def _verifier_config():
@@ -72,14 +71,6 @@ def init():
     from groq import Groq
     state.groq_client = Groq(api_key=GROQ_API_KEY)
 
-    # GPS — désactivé par défaut (GPS_ENABLED). On ne touche pas au port série
-    # (évite l'erreur Permission denied /dev/ttyS0 + démarrage plus rapide).
-    if GPS_ENABLED:
-        print('Connexion GPS...')
-        state.gps_serial = init_gps()
-    else:
-        state.gps_serial = None
-
     # Vérification micro → state.mic_ok pilote le lancement du thread conversation.
     print('Vérification micro...')
     import pyaudio
@@ -117,13 +108,6 @@ def main():
     parler('السلام عليكم، أنا مرافق، مساعدك الذكي. قول ليا "شنو قدامي" '
            'باش نوصف ليك لي قدامك، ولا "قرا ليا" باش نقرا ليك المكتوب. أنا معاك.')
 
-    if state.gps_serial:
-        pos = position_actuelle()
-        if pos:
-            parler(pos)
-        else:
-            parler('ماقدرتش نلقى موقعك دابا، خرج برا باش يتقى الإشارة')
-
     actifs = []
 
     # AutoScene tourne TOUJOURS (que l'utilisateur parle ou non) — description
@@ -149,6 +133,4 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print('Arrêt...')
-        if state.gps_serial:
-            state.gps_serial.close()
         state.camera.stop()

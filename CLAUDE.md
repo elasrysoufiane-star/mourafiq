@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Mourafiq (مرافق)** is an AI-powered assistive device for visually impaired users in Morocco, running on a Raspberry Pi 4. It combines Claude-powered scene description, OCR, GPS navigation, and voice interaction, responding entirely in Moroccan Darija Arabic.
+**Mourafiq (مرافق)** is an AI-powered assistive device for visually impaired users in Morocco, running on a Raspberry Pi 4. It combines Claude-powered scene description, OCR, and voice interaction, responding entirely in Moroccan Darija Arabic. (Le GPS a été retiré du projet le 2026-07-09 — ne pas le réintroduire.)
 
 ## Running the Application
 
@@ -14,7 +14,7 @@ cd ~/mourafiq
 python3 main.py
 ```
 
-The app requires physical hardware: PiCamera2, microphone, speaker/headphones, and an optional GPS module on `/dev/ttyS0`. It cannot run on a development machine without mocking.
+The app requires physical hardware: PiCamera2, microphone, and speaker/headphones. It cannot run on a development machine without mocking.
 
 ```bash
 echo 'export GROQ_API_KEY="gsk_..."' >> ~/.bashrc && source ~/.bashrc
@@ -48,8 +48,6 @@ mourafiq/
 │   │   └── detector.py             # mode_auto_scene() — description auto (Claude, 100%)
 │   ├── ocr/
 │   │   └── reader.py               # lire_texte() — capture + délègue providers.ocr
-│   ├── gps/
-│   │   └── location.py             # init_gps(), get_gps(), naviguer()
 │   ├── ai/
 │   │   ├── groq_client.py          # groq_darija() — llama-3.1-8b-instant
 │   │   └── claude_client.py        # claude_darija()/describe_scene()/read_text() — VLM
@@ -94,11 +92,10 @@ src.ai.claude_client ◄── config, core.memory  (anthropic + PIL lazy)
 src.audio.listener   ◄── config, core.state, audio.speaker  (providers.stt lazy dans _transcrire)
 src.vision.detector  ◄── config, core.state, audio.speaker, vision.camera  (providers.vision_ai, providers.ocr lazy dans mode_auto_scene)
 src.ocr.reader       ◄── audio.speaker, vision.camera  (providers.ocr lazy dans lire_texte)
-src.gps.location     ◄── config, core.state, audio.speaker, providers.ai
-src.conversation.intents ◄── audio.speaker, providers.ai, providers.vision_ai, vision.camera, ocr.reader, gps.location
+src.conversation.intents ◄── audio.speaker, providers.ai, providers.vision_ai, vision.camera, ocr.reader
 src.conversation.commands ◄── core.state, audio.listener, conversation.intents
 src.core.app         ◄── config, core.state, core.logging_setup, audio.speaker, audio.listener,
-                          vision.detector, conversation.commands, gps.location
+                          vision.detector, conversation.commands
 main.py              ◄── core.app
 ```
 
@@ -219,7 +216,7 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 **Règles :**
 1. Défauts du code = MEILLEURE QUALITÉ (`claude` + `azure` + `claude`, décision 2026-07-08 — voir `.claude/memory/decisions.md`) ; le `.env` ne contient QUE les clés API. Le gratuit n'est plus le défaut mais le FALLBACK automatique : sans clé ou en panne → groq / edge-tts / Tesseract, jamais de crash, jamais de silence (sauf la scène : message vocal clair, pas de fallback local).
 2. Si clé payante absente **OU appel Claude en échec après retries** → message clair, jamais d'exception non gérée. `claude_client` lève `ClaudeError` (jamais de phrase d'erreur avalée) ; la couche providers attrape et bascule : chat→Groq, OCR→Tesseract, scène→message vocal clair d'indisponibilité (pas de bascule locale, YOLO retiré) (`tests/test_fallbacks.py`).
-3. GPS reste toujours local. Tesseract reste le fallback OCR — Claude OCR est le défaut depuis 2026-07-08.
+3. Tesseract reste le fallback OCR — Claude OCR est le défaut depuis 2026-07-08.
 4. `src/providers/` = routage uniquement. Implémentations dans leurs modules d'origine.
 5. Imports providers en lazy (dans `_jouer_tts` / `_transcrire` / `read_text` / `lire_texte`) — rester testable sur Windows sans matériel.
 
@@ -231,12 +228,6 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 | `DEMO_MODE` | `free` | `free` (logique normale) ou `demo` (documentation uniquement) |
 | `EDGE_VOICE` | `ar-MA-JamalNeural` | Voix marocaine — utilisée par Azure Speech ET edge-tts (même catalogue) |
 | `TIMEOUT_ECOUTE` | `≈125 chunks (8s)` | Timeout micro |
-| `GPS_ENABLED` | `0` (désactivé) | GPS coupé par défaut (matériel /dev/ttyS0 KO + navigation approximative sans routage). `init()` saute le port série. `1` pour réactiver |
-| `GPS_PORT` | `/dev/ttyS0` | Port série GPS (env-overridable) |
-| `GPS_BAUD` | `9600` | Baud GPS (env-overridable) |
-| `GPS_READ_TIMEOUT` | `3` | Durée max lecture NMEA (s) avant abandon |
-| `GEOCODE_ENABLED` | `1` | Reverse geocoding lat/lon → adresse (Nominatim) ; 0 = coords brutes |
-| `GEOCODE_TIMEOUT` | `5` | Timeout requête Nominatim (s) |
 | `AI_PROVIDER` | `claude` | Provider NLP (claude / groq / openai) — fallback groq sans clé |
 | `STT_PROVIDER` | `groq` | Provider STT (groq / openai) |
 | `STT_MODEL` | `whisper-large-v3` | Modèle Whisper Groq (`whisper-large-v3-turbo` si la vitesse prime) |
@@ -330,12 +321,8 @@ pytest tests/ -v
 | Stop keyword | `سلام` (salut) → `سلامة` (adieu) : le salut n'arrête plus l'app | `src/conversation/intents.py` |
 | Bienvenue | Phrase d'accueil « مرافق » annonçant les commandes clés | `src/core/app.py` |
 | Log TTS | Affiche le moteur réel (edge/gtts/elevenlabs) | `src/providers/tts.py` |
-| GPS robustesse | `get_gps()` : accepte GGA toutes constellations (GNGGA/GPGGA…), vérifie `gps_qual` (fix réel), lecture bornée `GPS_READ_TIMEOUT`, trame corrompue ignorée ; `GPS_PORT/BAUD` env-overridable | `src/gps/location.py`, `config/settings.py` |
-| GPS reverse geocoding | `reverse_geocode()` (Nominatim OSM, stdlib `urllib`, cache ~11 m) → « vous êtes Boulevard X، quartier Y، ville ». `position_actuelle()` centralise « وين أنا » (adresse réelle, fallback coords). Fallback propre si pas d'Internet | `src/gps/location.py`, `src/conversation/intents.py` |
 | Mode vision seul | Sans micro : `init()` met `state.mic_ok=False`, saute la calibration, `main()` ne lance pas le thread conversation → plus de boucle « En attente de voix → Timeout 8s » | `src/core/app.py`, `src/core/state.py` |
 | Description auto (sans micro) | Thread `mode_auto_scene()` : sans micro, décrit la scène toutes les `AUTO_DESCRIBE_INTERVAL`s (`describe_scene()`→`parler()`). Claude si `VISION_AI_PROVIDER=claude`, sinon YOLO+Groq gratuit. Respecte `conversation_active` + cooldown | `src/vision/detector.py`, `src/core/app.py`, `config/settings.py` |
-
-**GPS — reste à faire (prioritaire) :** `naviguer()` envoie la position de départ (adresse réelle) + destination au LLM, mais sans API de routage le LLM **ne peut pas** calculer un vrai itinéraire (directions encore approximatives). Prochaines étapes : routage réel (OSRM/Directions) + haversine pour la distance ; cap (RMC en mouvement ou magnétomètre) pour « tourne à gauche/droite ». Idéalement thread GPS de fond qui cache le dernier fix (comme YOLO).
 
 **Limite connue (matérielle) :** micro+voix sur le même canal **Bluetooth HFP 8 kHz** (FreeBuds SE 3) → audio dégradé des deux côtés, écho résiduel et erreurs Whisper darija possibles. Correctif définitif = **micro USB séparé** (FreeBuds en sortie A2DP). Le mot de réveil compense côté fiabilité.
 
@@ -368,12 +355,21 @@ pytest tests/ -v
 
 **Monter encore la qualité (via `.env`) :** `CLAUDE_VISION_MODEL=claude-sonnet-5` (boucle continue en Sonnet — coût ×2 sur ~600 appels/h) ou `CLAUDE_VISION_MODEL_HQ=claude-opus-4-8`. ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
 
+## Changements (2026-07-09) — retrait du GPS
+
+Le GPS a été **entièrement retiré** (décision projet : pas de navigation GPS).
+Supprimé : `src/gps/` (module complet), `state.gps_serial`, constantes `GPS_*` et
+`GEOCODE_*`, intentions vocales localisation/navigation (`KEYWORDS_GPS`,
+`KEYWORDS_NAVIGATE`, branches صيدلية/سبيطار/جامع/محطة), dépendances `pyserial` et
+`pynmea2`, tests GPS/navigation associés. Phrase d'accueil et aide vocale mises à
+jour. Le README affiche la photo du projet `assets/mourafiq-medina.png` en en-tête.
+
 ## Dossier `.claude/` (agents, skills, mémoire projet)
 
 | Ressource | Rôle |
 |-----------|------|
 | `.claude/agents/darija-reviewer.md` | Relecture darija (naturalité + adéquation TTS/accessibilité) |
-| `.claude/agents/pi-debugger.md` | Diagnostic runtime Pi (audio/BT, caméra, GPS, erreurs API) |
+| `.claude/agents/pi-debugger.md` | Diagnostic runtime Pi (audio/BT, caméra, erreurs API) |
 | `.claude/skills/run-tests/` | Lancer la suite de tests sur Windows sans matériel |
 | `.claude/skills/deploy-pi/` | Checklist déploiement Windows → Raspberry Pi |
 | `.claude/skills/tune-claude/` | Profils coût/qualité Claude (eco / mixte / max) via `.env` |

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mourafiq-medina.png" alt="Mourafiq IA — مرافق : utilisateur portant la caméra pectorale Mourafiq dans une médina marocaine" width="100%">
+</p>
+
 # Mourafiq — مرافق
 ### Assistant IA pour personnes malvoyantes au Maroc
 **Raspberry Pi 4 | Darija marocaine | Master IT TAM UM5 2026**
@@ -6,15 +10,19 @@
 
 ## Présentation
 
-Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes malvoyantes à se déplacer et interagir avec leur environnement. Il répond entièrement en **darija marocaine** (arabe dialectal marocain).
+Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes malvoyantes à comprendre leur environnement et interagir avec lui. Il répond entièrement en **darija marocaine** (arabe dialectal marocain).
 
 **Fonctionnalités :**
-- Description de scène en détail par IA (Claude vision — nécessite `ANTHROPIC_API_KEY`)
-- Lecture de texte arabe et français (Tesseract OCR, ou Claude)
-- Reconnaissance vocale arabe (Groq Whisper)
-- Réponses en darija (Groq LLaMA 3.1)
-- Navigation GPS avec instructions vocales
-- Sortie audio Bluetooth (edge-tts + mpg123 + PipeWire)
+- Description détaillée de la scène par IA (Claude vision — nécessite `ANTHROPIC_API_KEY`)
+- Description automatique en continu (AutoScene : scène + texte visible, toutes les 10 s)
+- Lecture de texte arabe et français (Claude par défaut, fallback Tesseract OCR local)
+- Reconnaissance vocale arabe (Groq Whisper large-v3 + VAD webrtcvad)
+- Conversation en darija (Claude Sonnet, fallback Groq LLaMA 3.1)
+- Mot de réveil « مرافق » + fenêtre de suivi pour enchaîner les questions
+- Mémoire de conversation (questions de suivi, dernière image gardée)
+- Synthèse vocale marocaine `ar-MA-JamalNeural` (Azure Speech, fallback edge-tts/gTTS)
+- Sortie audio Bluetooth (mpg123 + PipeWire)
+- Logs runtime horodatés dans `logs/` pour le débogage
 
 ---
 
@@ -22,34 +30,40 @@ Mourafiq est un assistant IA embarqué sur Raspberry Pi 4 qui aide les personnes
 
 ```
 mourafiq/
-├── main.py                    # Point d'entrée
+├── main.py                    # Point d'entrée → src.core.app.main()
 ├── config/
-│   └── settings.py            # Constantes (ports, seuils, chemins, voix)
+│   └── settings.py            # Toutes les constantes de configuration
 ├── src/
 │   ├── core/
-│   │   ├── state.py           # État partagé entre threads
-│   │   └── app.py             # Initialisation matériel + boucle principale
+│   │   ├── state.py           # État partagé entre threads (locks, matériel)
+│   │   ├── memory.py          # Mémoire de conversation (texte + dernière image)
+│   │   ├── logging_setup.py   # Tee console → logs/mourafiq_*.log horodaté
+│   │   └── app.py             # init() + main() — matériel lazy-loaded
 │   ├── audio/
-│   │   ├── speaker.py         # parler() — edge-tts/gTTS + mpg123
-│   │   └── listener.py        # reconnaitre_voix() — VAD + Whisper
+│   │   ├── speaker.py         # parler() — TTS + mpg123
+│   │   ├── listener.py        # reconnaitre_voix() — VAD webrtcvad + Whisper
+│   │   └── text_clean.py      # Nettoyage Markdown avant synthèse vocale
 │   ├── vision/
-│   │   ├── camera.py          # capturer(hq=) — capture 640×480 / still HQ
-│   │   └── detector.py        # mode_auto_scene() — description auto (Claude)
+│   │   ├── camera.py          # capturer(hq=) — flux 640×480 ou still pleine résolution
+│   │   └── detector.py        # mode_auto_scene() — description auto (scène + OCR)
 │   ├── ocr/
-│   │   └── reader.py          # lire_texte() — Tesseract ara+fra ou Claude
-│   ├── gps/
-│   │   └── location.py        # get_gps(), naviguer()
+│   │   └── reader.py          # lire_texte() — capture + providers.ocr
 │   ├── ai/
-│   │   ├── groq_client.py     # groq_darija() — LLaMA 3.1
-│   │   └── claude_client.py   # claude_darija()/describe_scene()/read_text()
+│   │   ├── groq_client.py     # groq_darija() — LLaMA 3.1 (fallback gratuit)
+│   │   └── claude_client.py   # claude_darija()/describe_scene()/read_text() — VLM
+│   ├── providers/             # Couche de routage configurable via .env
+│   │   ├── ai.py              # get_ai_response() — claude/groq/openai
+│   │   ├── stt.py             # transcribe() — groq/openai
+│   │   ├── tts.py             # synthesize() — azure/edge/gtts/elevenlabs
+│   │   ├── vision_ai.py       # describe_scene() — 100% Claude
+│   │   └── ocr.py             # read_text() — claude/local (Tesseract)
 │   └── conversation/
 │       ├── intents.py         # process_command() + constantes KEYWORDS_*
 │       └── commands.py        # mode_conversation() — thread écoute
-├── tests/
-│   ├── test_config.py
-│   └── test_intents.py
+├── assets/                    # Photo du projet (README)
+├── tests/                     # Tests unitaires (Windows/Linux, sans matériel)
 ├── temp/                      # Fichiers audio temporaires (auto-créé)
-└── logs/                      # Logs runtime (auto-créé)
+└── logs/                      # Logs runtime horodatés (auto-créé)
 ```
 
 ---
@@ -72,28 +86,23 @@ source /home/som/projet_ia/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Clé API Groq (gratuite)
+### 3. Clés API
 
-1. Créer un compte sur [console.groq.com](https://console.groq.com)
-2. **API Keys → Create API Key** (format `gsk_...`)
-3. Ajouter dans `~/.bashrc` :
+Copier `.env.example` en `.env` et remplir les clés :
 
 ```bash
-echo 'export GROQ_API_KEY="gsk_votre_cle"' >> ~/.bashrc
-source ~/.bashrc
+cp .env.example .env
 ```
 
-### 4. Clé API Claude (pour la description de scène)
+| Clé | Obligatoire | Rôle | Où l'obtenir |
+|---|---|---|---|
+| `GROQ_API_KEY` | **Oui** | STT Whisper + fallback conversation | [console.groq.com](https://console.groq.com) (gratuit) |
+| `ANTHROPIC_API_KEY` | **Oui pour la vision** | Description de scène, OCR, conversation | [console.anthropic.com](https://console.anthropic.com) |
+| `AZURE_SPEECH_KEY` | Non | TTS officiel (tier F0 gratuit 500K car./mois) ; vide = edge-tts | [portal.azure.com](https://portal.azure.com) |
 
-La description de scène et la lecture OCR détaillées nécessitent Claude — sans
-clé, l'assistant continue de répondre en darija (Groq) mais dit clairement
-qu'il ne peut pas voir pour l'instant, au lieu de rester muet.
-
-1. Créer un compte sur [console.anthropic.com](https://console.anthropic.com)
-2. **API Keys → Create Key** (format `sk-ant-...`)
-3. Ajouter dans `.env` : `ANTHROPIC_API_KEY=sk-ant-...`, `VISION_AI_PROVIDER` n'existe
-   plus (la scène passe toujours par Claude) ; `OCR_PROVIDER=claude` est optionnel
-   (défaut `local` = Tesseract, gratuit).
+Sans `ANTHROPIC_API_KEY`, l'assistant continue de discuter (Groq) et de lire
+(Tesseract), mais annonce clairement à l'oral qu'il ne peut pas décrire la
+scène — il ne reste jamais muet.
 
 ---
 
@@ -110,34 +119,56 @@ pactl set-default-sink $(pactl list sinks short | grep bluez | awk '{print $2}')
 python3 main.py
 ```
 
+Au démarrage, l'assistant se présente puis :
+- **AutoScene** décrit la scène et lit le texte visible toutes les 10 s (`AUTO_DESCRIBE_INTERVAL`), avec ou sans micro ;
+- **Conversation** s'active en plus si un micro est détecté — dire « **مرافق** » (mot de réveil) puis la commande.
+
 ---
 
 ## Commandes vocales
 
 | Commande darija | Action |
 |---|---|
-| `شنو قدامي` / `شوف` / `وصف` | Décrit les objets visibles |
-| `قرا ليا` / `اقرأ` | Lit le texte (OCR) |
-| `وين أنا` / `فاين أنا` | Position GPS actuelle |
-| `ودي للصيدلية` | Navigation vers la pharmacie |
-| `ودي للسبيطار` | Navigation vers l'hôpital |
-| `ودي للجامع` | Navigation vers la mosquée |
-| `ودي للمحطة` | Navigation vers la gare |
+| `مرافق` | Mot de réveil (puis fenêtre de suivi de 15 s) |
+| `شنو قدامي` / `شوف` / `وصف` | Décrit la scène en détail (Claude vision HQ) |
+| `قرا ليا` / `اقرأ` | Lit le texte visible (OCR) |
 | `عاونني` / `مساعدة` | Liste les commandes |
-| `وقف` / `بارك` / `سلام` | Arrête l'assistant |
+| `وقف` / `بارك` / `بسلامة` | Arrête l'assistant |
+| Toute autre question | Réponse libre en darija (Claude, fallback Groq) |
 
 ---
 
-## Tests (Windows & Linux)
+## Providers et configuration
+
+Défauts du code = **meilleure qualité** ; chaque brique retombe automatiquement
+sur le gratuit si la clé manque ou si l'appel échoue (jamais de crash) :
+
+| Composant | Défaut | Fallback | Variable `.env` |
+|---|---|---|---|
+| Conversation | Claude `claude-sonnet-5` | Groq `llama-3.1-8b-instant` (gratuit) | `AI_PROVIDER` |
+| Description de scène | Claude (Haiku/Sonnet selon contexte) | Message vocal clair (pas de fallback local) | — |
+| OCR | Claude | Tesseract local (gratuit) | `OCR_PROVIDER` |
+| STT | Groq `whisper-large-v3` | — | `STT_PROVIDER`, `STT_MODEL` |
+| TTS | Azure Speech `ar-MA-JamalNeural` | edge-tts → gTTS (gratuits) | `TTS_PROVIDER` |
+
+Réglages utiles dans `.env` : `AUTO_DESCRIBE_INTERVAL` (coût/fréquence de la
+description auto ; `0` = désactivée), `CLAUDE_VISION_MODEL`,
+`CLAUDE_VISION_MODEL_HQ`, `CLAUDE_IMG_MAX_PX`. Voir `config/settings.py`
+pour la liste complète commentée.
+
+---
+
+## Tests (Windows & Linux, sans matériel)
 
 ```bash
-# Depuis la racine du projet
-python3 tests/test_config.py
-python3 tests/test_intents.py
-
-# Avec pytest (si installé)
 pip install pytest
 pytest tests/ -v
+
+# Ou individuellement
+python3 tests/test_config.py
+python3 tests/test_intents.py
+python3 tests/test_providers.py
+python3 tests/test_fallbacks.py
 ```
 
 ---
@@ -151,82 +182,24 @@ bluetoothctl connect 28:52:E0:23:61:6F
 ```
 
 **Vision muette :**
-- Vérifier `echo $ANTHROPIC_API_KEY` (la scène passe toujours par Claude — pas
-  de détection locale de secours)
+- Vérifier `ANTHROPIC_API_KEY` dans `.env` (la scène passe toujours par Claude)
 - Vérifier la connexion Internet du Pi
+- Consulter le dernier log dans `logs/`
 
 **Micro ne répond pas :**
 - Vérifier avec `arecord -l`
 - Relancer dans un environnement silencieux pour recalibration
-
----
-
-## Mode gratuit vs Mode démo
-
-Mourafiq supporte deux modes de fonctionnement configurés via `.env` :
-
-### Mode gratuit (conversation + OCR + GPS)
-
-Copier `.env.example` en `.env` et laisser `DEMO_MODE=free`. La conversation,
-la lecture de texte (Tesseract) et le GPS restent gratuits ; la **description
-de scène nécessite `ANTHROPIC_API_KEY`** (YOLO a été retiré — trop peu fiable
-pour un usage réel — donc plus de détection locale gratuite de secours).
-
-```bash
-cp .env.example .env
-# Remplir GROQ_API_KEY (conversation/STT) + ANTHROPIC_API_KEY (vision)
-```
-
-| Composant | Provider | Coût |
-|---|---|---|
-| NLP / Darija | Groq `llama-3.1-8b-instant` | Gratuit (14 400 req/jour) |
-| STT Arabe | Groq `whisper-large-v3-turbo` | Gratuit (7 200 req/jour) |
-| TTS Arabe | edge-tts `ar-MA-JamalNeural` | Gratuit (Microsoft) |
-| Fallback TTS | gTTS | Gratuit |
-| Description de scène | Claude (`ANTHROPIC_API_KEY`) | **Payant** — indispensable, pas de fallback local |
-| OCR | Tesseract (local, défaut) ou Claude | Gratuit / payant selon `OCR_PROVIDER` |
-| GPS | NMEA série (local) | Gratuit |
-
-### Mode démo (ElevenLabs TTS)
-
-Voix plus naturelle et expressive pour les présentations. Nécessite un compte ElevenLabs.
-
-```bash
-# Dans .env :
-DEMO_MODE=demo
-TTS_PROVIDER=elevenlabs
-ELEVENLABS_API_KEY=votre_cle_ici
-ELEVENLABS_VOICE_ID=              # laisser vide = voix Adam (supporte l'arabe)
-```
-
-1. Créer un compte sur [elevenlabs.io](https://elevenlabs.io)
-2. **Profile → API Key** → copier la clé
-3. (Optionnel) Choisir une voix arabophone sur [lab.elevenlabs.io/voice-library](https://lab.elevenlabs.io/voice-library)
-4. Installer le SDK : `pip install elevenlabs`
-
-Si `ELEVENLABS_API_KEY` est absent ou si le quota est dépassé, le système revient automatiquement sur edge-tts sans interruption.
-
-### Changer de provider à chaud
-
-```bash
-# Passer en mode démo
-export TTS_PROVIDER=elevenlabs
-export ELEVENLABS_API_KEY=sk_...
-python3 main.py
-
-# Revenir au mode gratuit
-export TTS_PROVIDER=edge
-python3 main.py
-```
+- Dire le mot de réveil « مرافق » avant la commande
 
 ---
 
 ## API utilisées
 
-| Service | Modèle | Quota gratuit |
+| Service | Modèle | Coût |
 |---|---|---|
-| Groq NLP | `llama-3.1-8b-instant` | 14 400 req/jour |
-| Groq STT | `whisper-large-v3-turbo` | 7 200 req/jour |
-| edge-tts | `ar-MA-JamalNeural` | Gratuit (Microsoft) |
-| gTTS | — | Gratuit (fallback) |
-| ElevenLabs | `eleven_multilingual_v2` | Payant (mode démo) |
+| Claude (Anthropic) | `claude-sonnet-5` (conversation/vision/OCR) | Payant |
+| Groq NLP | `llama-3.1-8b-instant` | Gratuit (14 400 req/jour) |
+| Groq STT | `whisper-large-v3` | Gratuit (7 200 req/jour) |
+| Azure Speech TTS | `ar-MA-JamalNeural` | Gratuit (tier F0, 500K car./mois) |
+| edge-tts / gTTS | `ar-MA-JamalNeural` / — | Gratuit (fallback) |
+| ElevenLabs | `eleven_multilingual_v2` | Payant (option `TTS_PROVIDER=elevenlabs`) |

@@ -188,3 +188,19 @@ minutes silencieuses.
 **Revenir dessus si** : 15s s'avère trop court pour de vraies réponses (ex.
 `claude-opus-4-8` sur une image HQ) — monter `_TIMEOUT_S` plutôt que
 réactiver `max_retries` du SDK (qui recrée le problème de silence).
+
+## 2026-07-09 — Retrait complet du GPS
+
+**Décision** : suppression totale du GPS — module `src/gps/` (init_gps,
+get_gps, naviguer, reverse_geocode), `state.gps_serial`, constantes `GPS_*`
+et `GEOCODE_*`, intentions vocales localisation (« وين أنا ») et navigation
+(صيدلية/سبيطار/جامع/محطة), dépendances `pyserial`/`pynmea2`, tests associés.
+
+**Pourquoi** : décision projet explicite — « on ne va pas travailler avec
+GPS ». La navigation restait de toute façon approximative sans API de
+routage (voir l'ancien « GPS — reste à faire » du CLAUDE.md) ; le projet se
+recentre sur vision + OCR + conversation.
+
+**Revenir dessus si** : besoin réel de localisation/navigation — repartir de
+`git log` avant ce commit pour l'implémentation précédente (NMEA + Nominatim),
+et prévoir directement un routage réel (OSRM/Directions) plutôt que le LLM.

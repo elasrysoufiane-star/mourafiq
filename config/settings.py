@@ -106,24 +106,6 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # pour réactiver la description continue (« yeux permanents ») — voir CLAUDE.md.
 AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '0'))
 
-# ── GPS ───────────────────────────────────────────────────────────────────────
-# GPS DÉSACTIVÉ par défaut (2026-07-08) : matériel non fiable sur le Pi
-# (Permission denied /dev/ttyS0) + sans API de routage la navigation reste
-# approximative → écarté de la démo, qui se concentre sur la vision + lecture.
-# init() saute alors toute connexion série (aucune erreur, démarrage plus rapide).
-# GPS_ENABLED=1 dans .env pour réactiver (après `sudo usermod -aG dialout som`).
-GPS_ENABLED = os.environ.get('GPS_ENABLED', '0') not in ('0', 'false', 'False', '')
-# Surchargeable via .env (cohérent avec le reste de la config).
-GPS_PORT = os.environ.get('GPS_PORT', '/dev/ttyS0')
-GPS_BAUD = int(os.environ.get('GPS_BAUD', '9600'))
-# Durée max de lecture des trames NMEA avant abandon (évite de bloquer le thread).
-GPS_READ_TIMEOUT = float(os.environ.get('GPS_READ_TIMEOUT', '3'))
-# Reverse geocoding : convertit lat/lon → adresse parlable (rue, quartier, ville)
-# via OpenStreetMap Nominatim (gratuit, pas de clé, nécessite Internet).
-# 0 → désactivé : on annonce alors les coordonnées brutes (comportement précédent).
-GEOCODE_ENABLED = os.environ.get('GEOCODE_ENABLED', '1') not in ('0', 'false', 'False', '')
-GEOCODE_TIMEOUT = float(os.environ.get('GEOCODE_TIMEOUT', '5'))
-
 # ── Logs runtime ──────────────────────────────────────────────────────────────
 # Capture TOUTE la sortie console (tous les print(), tous les threads) dans
 # logs/mourafiq_AAAAMMJJ_HHMMSS.log, horodatée + nom du thread — pour déboguer
