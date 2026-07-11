@@ -18,14 +18,18 @@ def parler(texte: str) -> None:
     lit littéralement. Active conversation_active pendant toute la sortie audio.
     """
     texte = clean_for_speech(texte)
-    state.conversation_active.set()
+    # set/clear À L'INTÉRIEUR du verrou : sinon un appelant en attente du verrou
+    # joue son audio APRÈS que le premier ait fait clear() → l'anti-écho du
+    # listener ne voit rien et le micro transcrit la voix de l'assistant.
     with state.audio_lock:
+        state.conversation_active.set()
         try:
             print(f'Pi dit: {texte}')
             _jouer_tts(texte)
         except Exception as e:
             print(f'Erreur audio: {e}')
-    state.conversation_active.clear()
+        finally:
+            state.conversation_active.clear()
 
 
 def _jouer_tts(texte: str) -> None:
