@@ -99,6 +99,26 @@ def test_mic_device_index_config():
     assert isinstance(MIC_DEVICE_INDEX, int)
 
 
+def test_frames_20ms_48k():
+    """À 48 kHz (adaptateur USB) : trame 20 ms = 1920 octets → 1 trame par
+    chunk de 2048 octets."""
+    frames = listener._frames_20ms(b'\x00' * 2048, rate=48000)
+    assert len(frames) == 1
+    assert len(frames[0]) == listener._frame_octets(48000) == 1920
+
+
+def test_est_voix_taux_non_supporte_fallback_seuil():
+    """44.1 kHz (adaptateur jack→USB courant) : webrtcvad ne supporte pas ce
+    taux → fallback seuil de volume, jamais d'exception."""
+    ancien_seuil = state.VOL_SEUIL
+    state.VOL_SEUIL = 200
+    try:
+        assert _avec(True, lambda: listener._est_voix(b'\x00' * 2048, 300, rate=44100)) is True
+        assert _avec(True, lambda: listener._est_voix(b'\x00' * 2048, 100, rate=44100)) is False
+    finally:
+        state.VOL_SEUIL = ancien_seuil
+
+
 if __name__ == '__main__':
     tests = [
         test_frames_20ms_decoupe,
@@ -110,6 +130,8 @@ if __name__ == '__main__':
         test_device_index_defaut_systeme,
         test_device_index_explicite,
         test_mic_device_index_config,
+        test_frames_20ms_48k,
+        test_est_voix_taux_non_supporte_fallback_seuil,
     ]
     passed = 0
     failed = 0

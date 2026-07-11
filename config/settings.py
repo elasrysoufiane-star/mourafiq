@@ -131,10 +131,13 @@ EDGE_VOICE = 'ar-MA-JamalNeural'
 # 16000 samples/s ÷ 1024 samples/chunk × 8s ≈ 125 chunks
 TIMEOUT_ECOUTE = int(8 * 16000 / 1024)
 
-# Index PyAudio du micro. 1 = périphérique pipewire (défaut historique du Pi).
-# -1 = laisser PyAudio choisir le micro par défaut du système — à utiliser
-# quand un micro USB sera branché (les index changent avec les périphériques).
-MIC_DEVICE_INDEX = int(os.environ.get('MIC_DEVICE_INDEX', '1'))
+# Index PyAudio du micro. -1 (défaut depuis 2026-07-11) = micro par défaut du
+# système — adapté au micro USB (adaptateur jack→USB) : les index PyAudio
+# changent dès que le matériel audio change (Bluetooth/USB), un index figé
+# finit par pointer sur le mauvais périphérique (OSError -9997). L'ouverture
+# est de toute façon robuste : index configuré → défaut système, 16 kHz →
+# taux natif (src/audio/listener.py _ouvrir_micro).
+MIC_DEVICE_INDEX = int(os.environ.get('MIC_DEVICE_INDEX', '-1'))
 
 # ── Mot de réveil (wake word) ─────────────────────────────────────────────────
 # L'appareil n'exécute une commande qu'après avoir entendu son nom (« مرافق »),
