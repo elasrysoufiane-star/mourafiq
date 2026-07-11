@@ -118,11 +118,11 @@ en cas d'échec : fallback automatique edge-tts.
 
 ## API — Claude (Anthropic, optionnel — cerveau vision à la demande)
 
-| Feature | Modèle défaut | Prix /1M (in/out) |
-|---------|---------------|-------------------|
-| Description de scène (VLM) | `claude-haiku-4-5` | $1 / $5 |
-| Qualité recommandée (à la demande) | `claude-sonnet-5` | $2 / $10 (intro jusqu'au 31/08/2026, puis $3/$15) |
-| Qualité max (option) | `claude-opus-4-8` | $5 / $25 |
+| Modèle | Rôle dans le projet | Prix /1M (in/out) |
+|--------|---------------------|-------------------|
+| `claude-opus-4-8` | **DÉFAUT partout** depuis 2026-07-11 (conversation, scène, OCR, boucle) | $5 / $25 |
+| `claude-sonnet-5` | option éco boucle continue (via `.env`) | $2 / $10 (intro jusqu'au 31/08/2026, puis $3/$15) |
+| `claude-haiku-4-5` | option éco max (via `.env`) | $1 / $5 |
 
 Clé sur **console.anthropic.com** → API Keys (format `sk-ant-...`). **Obligatoire pour la vision** (YOLO a été retiré, il n'y a plus de fallback local) — sans clé ou en cas d'échec, message vocal clair d'indisponibilité au lieu d'une description.
 
@@ -134,14 +134,14 @@ Cerveau **100% Claude** (langage + vision + lecture), oreilles/voix hors Claude 
 
 | Composant | Provider (défaut) | Modèle |
 |-----------|-------------------|--------|
-| Conversation darija | `AI_PROVIDER=claude` (fallback groq) | `CLAUDE_TEXT_MODEL` (sonnet-5) |
-| Description scène (à la demande) | toujours Claude | `CLAUDE_VISION_MODEL_HQ` (sonnet-5) |
-| Description scène (auto, toujours active) | toujours Claude | `CLAUDE_VISION_MODEL` (haiku, éco) |
-| Lecture texte / OCR | `OCR_PROVIDER=claude` (fallback Tesseract) | `CLAUDE_VISION_MODEL_HQ` (sonnet-5) |
+| Conversation darija | `AI_PROVIDER=claude` (fallback groq) | `CLAUDE_TEXT_MODEL` (opus-4-8) |
+| Description scène (à la demande) | toujours Claude | `CLAUDE_VISION_MODEL_HQ` (opus-4-8) |
+| Description scène (auto, si activée) | toujours Claude | `CLAUDE_VISION_MODEL` (opus-4-8) |
+| Lecture texte / OCR (à la demande) | `OCR_PROVIDER=claude` (fallback Tesseract) | `CLAUDE_OCR_MODEL` (opus-4-8) |
 | STT (micro) | **reste** `groq` (gratuit) | `whisper-large-v3` |
 | TTS (voix) | `azure` — Azure Speech officiel (fallback edge) | ar-MA-JamalNeural |
 
-**Stratégie MIXTE (coût/qualité) :** continu = Haiku (`CLAUDE_VISION_MODEL`), à la demande = Sonnet (`CLAUDE_VISION_MODEL_HQ`, déclenché par `hq=True` dans `describe_scene`).
+**Opus 4.8 PARTOUT (décision 2026-07-11)** — plus de stratégie mixte : `CLAUDE_VISION_MODEL` (boucle continue) est passé de Sonnet 5 à Opus 4.8 dans `settings.py`. ⚠️ Si la boucle auto est réactivée (`AUTO_DESCRIBE_INTERVAL > 0`), Opus en continu = latence et coût ~×2 vs Sonnet — repasser `CLAUDE_VISION_MODEL=claude-sonnet-5` via `.env` si la narration traîne. `hq=True` dans `describe_scene` garde son rôle (budget tokens riche + still HQ + mémorisation).
 
 **Prompts accessibilité (`src/ai/claude_client.py`) :** trois prompts système dédiés —
 `_VISION_SYSTEM_PROMPT` (sécurité d'abord et avec insistance « عندك! », position+distance, action à faire, court), `_CHAT_SYSTEM_PROMPT` (compagnon darija patient), `_OCR_SYSTEM_PROMPT` (lit + donne le sens : courrier, médicaments, panneaux). Couvre rue + intérieur + lecture.
@@ -241,7 +241,7 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 | `ANTHROPIC_API_KEY` | `""` | Clé Claude PRINCIPALE — **requise pour la scène** (pas de fallback local, YOLO retiré) ; vide = fallback groq pour le chat/OCR uniquement |
 | `ANTHROPIC_API_KEY_FALLBACK` | `""` | Clé Claude de SECOURS — bascule auto si la principale échoue (quota/invalide/panne), gérée dans `claude_client._create`. Vide = pas de secours |
 | `CLAUDE_TEXT_MODEL` | `claude-opus-4-8` | Modèle conversation darija (`claude_darija`) — Opus (qualité max, multimodal) |
-| `CLAUDE_VISION_MODEL` | `claude-sonnet-5` | Modèle VLM **continu** (boucle auto + OCR de fond, si réactivée) — Sonnet 5 (Opus trop lent en continu) |
+| `CLAUDE_VISION_MODEL` | `claude-opus-4-8` | Modèle VLM **continu** (boucle auto + OCR de fond, si réactivée) — Opus partout depuis 2026-07-11 (⚠️ en continu : latence/coût ×2 vs Sonnet) |
 | `CLAUDE_VISION_MODEL_HQ` | `claude-opus-4-8` | Modèle VLM scène **à la demande** (« شنو قدامي ») — Opus |
 | `CLAUDE_OCR_MODEL` | `claude-opus-4-8` | Modèle OCR **à la demande** (« قرا ليا ») — Opus, précision max (posologie/manuscrit) ; OCR de fond reste `CLAUDE_VISION_MODEL` |
 | `CLAUDE_MAX_TOKENS` | `300` | Plafond réponse **à la demande** (scène HQ + chat) — riche |
@@ -256,6 +256,7 @@ d'échec : message vocal clair, jamais de silence, jamais d'exception.
 | `WAKE_WORD_ENABLED` | `1` | Mot de réveil « مرافق » requis (0 = écoute continue) |
 | `WAKE_FOLLOWUP_WINDOW` | `15` | Fenêtre de suivi après réveil/commande (secondes) |
 | `CONV_MEMORY_TURNS` | `15` | Tours (user+assistant) gardés en contexte Claude → questions de suivi. 0 = sans mémoire. + dernière image gardée pour suivi visuel (`memory.set_last_image`) |
+| `LAST_IMAGE_TTL` | `120` | Durée de vie (s) de la dernière image vue à la demande — au-delà elle est périmée et n'est plus rattachée aux questions chat (tokens image inutiles). 0 = jamais gardée |
 | `LOG_TO_FILE` | `1` | Capture toute la sortie console dans `logs/mourafiq_*.log` (horodaté + thread). 0 = console seule |
 | `LOG_KEEP_FILES` | `20` | Nombre de fichiers log gardés (les plus anciens supprimés au démarrage → carte SD du Pi) |
 
@@ -354,7 +355,20 @@ pytest tests/ -v
 
 **Activation : rien à activer** — les défauts du code SONT le mode qualité depuis 2026-07-08. `.env` = clés uniquement : `GROQ_API_KEY` (obligatoire — STT + démarrage), `ANTHROPIC_API_KEY` (obligatoire pour la vision — scène/OCR/conversation), `AZURE_SPEECH_KEY` (optionnel — TTS officiel, vide = edge-tts). Coût piloté par `AUTO_DESCRIBE_INTERVAL` (6s ≈ 600 appels scène/h, ×2 avec OCR claude) et le choix Haiku/Sonnet/Opus. Profils eco/mixte/max : `.claude/skills/tune-claude/SKILL.md`.
 
-**Monter encore la qualité (via `.env`) :** `CLAUDE_VISION_MODEL=claude-sonnet-5` (boucle continue en Sonnet — coût ×2 sur ~600 appels/h) ou `CLAUDE_VISION_MODEL_HQ=claude-opus-4-8`. ⚠️ Opus = +latence vocale — tester avant d'adopter pour la conversation. Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
+**Baisser le coût/la latence (via `.env`) :** tout est déjà en Opus 4.8 — `CLAUDE_VISION_MODEL=claude-sonnet-5` redescend la boucle continue en Sonnet (÷2 coût/latence sur ~600 appels/h si activée). Note : `CLAUDE_IMG_MAX_PX` > 640 n'agit que sur le still HQ (OCR + scène à la demande) ; la boucle continue reste en 640×480 (jamais agrandie → aucun surcoût).
+
+## Fixes (2026-07-11) — revue de code + Opus partout
+
+| Changement | Description | Fichiers |
+|-----------|-------------|----------|
+| Opus 4.8 partout | `CLAUDE_VISION_MODEL` (boucle continue + OCR de fond) Sonnet 5 → Opus 4.8 dans `settings.py` (décision explicite, `.env` reste clés-uniquement). ⚠️ coût/latence ×2 si la boucle auto est réactivée | `config/settings.py`, `tests/test_providers.py` |
+| Race anti-écho `parler()` | `conversation_active` était set AVANT `audio_lock` et clear APRÈS : un appelant en attente du verrou jouait son audio après le clear() du premier → le micro transcrivait la voix de l'assistant (retour du bug écho du 2026-07-08). set/clear déplacés À L'INTÉRIEUR du verrou (clear en `finally`) | `src/audio/speaker.py` |
+| Intentions vision trop larges | `KEYWORDS_VISION` contenait `شنو` et `واش` — interrogatifs de base de la darija : quasi TOUTE question libre déclenchait la caméra (still HQ + appel vision) au lieu du chat. Retirés ; restent `قدامي`/`شوف`/`وصف`. Le chat garde le suivi visuel via `memory.get_last_image()` | `src/conversation/intents.py`, `tests/test_intents.py` |
+| Mot d'arrêt `بارك` | Matchait les remerciements courants (`الله يبارك فيك` → arrêt de l'app !) et ne matchait PAS le `باراكا` visé (lettres non consécutives). Remplacé par `باراكا`/`بركا` | `src/conversation/intents.py`, `tests/test_intents.py` |
+| Arrêt vocal complet | « وقف » ne coupait que le thread Conversation — AutoScene continuait à narrer (et facturer). Nouveau `state.stop_event` : mis par `mode_conversation()`, attendu par `app.main()` → extinction propre de toute l'app (`camera.stop()` sur les deux chemins) | `src/core/state.py`, `src/conversation/commands.py`, `src/core/app.py` |
+| Dédoublonnage boucle auto | La boucle répétait la MÊME annonce à chaque cycle : scène inchangée, même panneau, et surtout le message d'indisponibilité Claude en boucle infinie sans Internet. Une annonce (scène ou OCR) identique à la précédente est tue | `src/vision/detector.py` |
+| TTL dernière image | `memory.get_last_image()` rattachait l'image à TOUTES les questions chat suivantes, indéfiniment (tokens image Opus à chaque tour + image périmée). Nouveau `LAST_IMAGE_TTL` (120s, 0 = jamais) | `src/core/memory.py`, `config/settings.py`, `tests/test_memory.py` |
+| Nettoyage + CI | Suppression `assistant_ia.py`/`assistant_ia_backup.py` (monolithe mort pré-refactor, 37KB). Nouveau `requirements-dev.txt` (pytest) + workflow GitHub Actions `tests.yml` (pytest sur push/PR, sans matériel) | racine, `.github/workflows/tests.yml`, `requirements-dev.txt` |
 
 ## Changements (2026-07-09) — retrait du GPS
 
@@ -389,7 +403,7 @@ Ce CLAUDE.md est chargé dans **chaque** session. Le tenir à jour après chaque
 
 | Besoin | Gratuit | Payant |
 |--------|---------|--------|
-| NLP Darija | **Groq** `llama-3.1-8b-instant` (fallback) | **Claude Sonnet 5** (défaut) |
+| NLP Darija | **Groq** `llama-3.1-8b-instant` (fallback) | **Claude Opus 4.8** (défaut) |
 | STT Arabe | **Groq** `whisper-large-v3` (défaut, gratuit) | OpenAI Whisper $0.006/min |
 | TTS Arabe | **Azure Speech** F0 500K car./mois (défaut) ; edge-tts + gTTS (fallbacks) | ElevenLabs écarté (pas de voix darija, cher) |
 | Description de scène | — (aucune option gratuite, YOLO retiré) | **Claude** (obligatoire, `ANTHROPIC_API_KEY`) |
