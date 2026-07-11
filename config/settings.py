@@ -58,18 +58,19 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 # rien couper (voir claude_client._create). Vide = pas de secours. 2ᵉ clé sk-ant-.
 ANTHROPIC_API_KEY_FALLBACK = os.environ.get('ANTHROPIC_API_KEY_FALLBACK', '')
 # Modèles — priorité QUALITÉ MAX (demande explicite, coût no-object, présentation).
-# Opus 4-8 sur TOUS les chemins À LA DEMANDE : conversation, « شنو قدامي؟ », OCR.
-# ⚠️ Opus = +latence vocale (quelques secondes de plus par réponse) — assumé pour
-# la qualité. La boucle CONTINUE reste Sonnet 5 (Opus impraticable à ~600 appels/h ;
-# de toute façon la boucle est OFF en mode démo, AUTO_DESCRIBE_INTERVAL=0).
+# Opus 4-8 sur TOUS les chemins depuis 2026-07-11 (décision explicite) : à la
+# demande ET boucle continue. ⚠️ Opus = +latence vocale (quelques secondes de
+# plus par réponse) — assumé pour la qualité. ⚠️ Boucle continue en Opus : coût
+# et latence ×2 vs Sonnet si AUTO_DESCRIBE_INTERVAL > 0 (OFF par défaut) —
+# repasser CLAUDE_VISION_MODEL=claude-sonnet-5 via .env si la narration traîne.
 CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-opus-4-8')
-# Boucle continue AutoScene (si réactivée) : Sonnet 5 — Opus trop lent en continu.
-CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-sonnet-5')
+# Boucle continue AutoScene (si réactivée) + OCR de fond.
+CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-opus-4-8')
 # Scène À LA DEMANDE (« شنو قدامي؟ ») : Opus 4-8 (qualité max).
 CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-opus-4-8')
 # OCR À LA DEMANDE (« قرا ليا ») : Opus 4-8 = lecture la plus précise (petits
 # caractères, manuscrit, posologie). L'OCR de fond (boucle) reste sur
-# CLAUDE_VISION_MODEL (Sonnet) — voir src/providers/ocr.py.
+# CLAUDE_VISION_MODEL — voir src/providers/ocr.py.
 CLAUDE_OCR_MODEL = os.environ.get('CLAUDE_OCR_MODEL', 'claude-opus-4-8')
 # Budgets tokens SÉPARÉS par contexte (levier dialogue). À la demande + chat =
 # riche (l'utilisateur a posé une vraie question) ; boucle de fond = court
