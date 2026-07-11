@@ -63,8 +63,11 @@ ANTHROPIC_API_KEY_FALLBACK = os.environ.get('ANTHROPIC_API_KEY_FALLBACK', '')
 # la qualité. La boucle CONTINUE reste Sonnet 5 (Opus impraticable à ~600 appels/h ;
 # de toute façon la boucle est OFF en mode démo, AUTO_DESCRIBE_INTERVAL=0).
 CLAUDE_TEXT_MODEL   = os.environ.get('CLAUDE_TEXT_MODEL',   'claude-opus-4-8')
-# Boucle continue AutoScene (si réactivée) : Sonnet 5 — Opus trop lent en continu.
-CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-sonnet-5')
+# Boucle continue AutoScene : Haiku 4.5 — choix de VITESSE, pas de coût
+# (~1.5s de latence contre ~3-4s Sonnet) : la narration continue doit coller à
+# ce que la caméra voit (moins de décalage caméra→parole, moins de silence).
+# La qualité max reste sur les chemins à la demande (Sonnet/Opus ci-dessous).
+CLAUDE_VISION_MODEL = os.environ.get('CLAUDE_VISION_MODEL', 'claude-haiku-4-5')
 # Scène À LA DEMANDE (« شنو قدامي؟ ») : Opus 4-8 (qualité max).
 CLAUDE_VISION_MODEL_HQ = os.environ.get('CLAUDE_VISION_MODEL_HQ', 'claude-opus-4-8')
 # OCR À LA DEMANDE (« قرا ليا ») : Opus 4-8 = lecture la plus précise (petits
@@ -80,8 +83,9 @@ CLAUDE_INTENT_MODEL = os.environ.get('CLAUDE_INTENT_MODEL', 'claude-haiku-4-5')
 # riche (l'utilisateur a posé une vraie question) ; boucle de fond = court
 # (narration brève qui ne monopolise pas la parole → moins d'écho/chevauchement).
 CLAUDE_MAX_TOKENS  = int(os.environ.get('CLAUDE_MAX_TOKENS',  '300'))
-# Boucle AutoScene uniquement : description de fond courte (~8s parlé).
-CLAUDE_SCENE_AUTO_MAX_TOKENS = int(os.environ.get('CLAUDE_SCENE_AUTO_MAX_TOKENS', '80'))
+# Boucle AutoScene uniquement : description de fond COURTE (~6-7s parlé) →
+# rotation rapide, la narration reste collée à ce que voit la caméra.
+CLAUDE_SCENE_AUTO_MAX_TOKENS = int(os.environ.get('CLAUDE_SCENE_AUTO_MAX_TOKENS', '60'))
 # La lecture OCR a besoin de plus de place qu'une description de scène
 # (rentre une lettre / notice entière) → plafond séparé, plus large.
 CLAUDE_OCR_MAX_TOKENS = int(os.environ.get('CLAUDE_OCR_MAX_TOKENS', '400'))
@@ -103,12 +107,13 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# 2 = NARRATION QUASI CONTINUE (2026-07-11, demande explicite « trop de
-# silence ») : fin de parole → 2s → capture fraîche → ~3s d'appel Claude →
-# nouvelle description. Silence effectif entre deux narrations ≈ 5-7s max.
+# 1 = NARRATION CONTINUE (2026-07-11) : fin de parole → 1s → capture fraîche →
+# ~1.5-2.5s d'appels Claude (scène + OCR en PARALLÈLE, boucle Haiku) → nouvelle
+# description. Silence effectif entre deux narrations ≈ 2.5-3.5s — l'utilisateur
+# peut placer « مرافق » dans ces respirations (le mot de réveil reste écouté).
 # 0 = mode à la demande. Monter pour plus de silence entre narrations.
 # La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '2'))
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '1'))
 
 # La narration attend-elle que l'utilisateur finisse de parler (micro) ?
 # 0 (défaut) = NON : la STT est inutilisable sur le matériel actuel (micro

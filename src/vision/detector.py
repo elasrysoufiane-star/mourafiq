@@ -6,6 +6,7 @@ et read_text() parlent clairement de l'indisponibilité si Claude ne répond pas
 (voir src/providers/vision_ai.py, src/providers/ocr.py) — jamais de silence.
 """
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from config.settings import AUTO_DESCRIBE_INTERVAL, VOICE_PRIORITY
 from src.core import state
@@ -62,6 +63,11 @@ def mode_auto_scene() -> None:
     from src.providers.ocr import read_text
     print(f'Mode description auto démarré (chaque {AUTO_DESCRIBE_INTERVAL:.0f}s)...')
 
+    # Scène et OCR partent en PARALLÈLE sur la même capture (appels réseau IO) :
+    # temps mort = max(scène, OCR) ≈ 2.5s au lieu de la somme ≈ 5s → moins de
+    # silence entre narrations et moins de décalage caméra→parole.
+    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='AutoSceneAPI')
+
     while True:
         try:
             time.sleep(AUTO_DESCRIBE_INTERVAL)
@@ -74,14 +80,18 @@ def mode_auto_scene() -> None:
 
             img = capturer()  # flux 640×480 — boucle éco, pas de still HQ ici
 
-            desc = describe_scene(img)
-            # L'utilisateur a pu commencer à parler PENDANT l'appel Claude
-            # (~2-4s) → re-vérifier avant de prendre la parole.
+            # Les deux appels Claude en parallèle sur la même capture.
+            futur_scene = executor.submit(describe_scene, img)
+            futur_texte = executor.submit(read_text, img, remember=False)
+
+            desc = futur_scene.result()
+            # Une sortie audio a pu démarrer pendant l'appel → re-vérifier
+            # avant de prendre la parole.
             _attendre_parole_finie()
             if desc:
                 parler(desc)
 
-            texte = read_text(img, remember=False)
+            texte = futur_texte.result()
             if texte and not any(s in texte for s in _OCR_SANS_RESULTAT):
                 _attendre_parole_finie()
                 parler(texte)

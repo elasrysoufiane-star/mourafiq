@@ -73,14 +73,14 @@ def test_default_quality_mode():
         assert settings.OCR_PROVIDER == 'claude', "OCR_PROVIDER par défaut doit être 'claude'"
         assert settings.STT_MODEL    == 'whisper-large-v3', "STT_MODEL par défaut doit être 'whisper-large-v3'"
         assert settings.CLAUDE_TEXT_MODEL      == 'claude-opus-4-8', "conversation en Opus (qualité max)"
-        assert settings.CLAUDE_VISION_MODEL    == 'claude-sonnet-5', "boucle continue en Sonnet 5 (Opus trop lent)"
+        assert settings.CLAUDE_VISION_MODEL    == 'claude-haiku-4-5', "boucle continue en Haiku (vitesse → moins de décalage)"
         assert settings.CLAUDE_VISION_MODEL_HQ == 'claude-opus-4-8', "scène à la demande en Opus"
         assert settings.CLAUDE_OCR_MODEL       == 'claude-opus-4-8', "OCR à la demande en Opus"
-        assert settings.AUTO_DESCRIBE_INTERVAL == 2, "narration quasi continue (silence ≈5-7s)"
+        assert settings.AUTO_DESCRIBE_INTERVAL == 1, "narration continue (silence ≈2.5-3.5s)"
         assert settings.VOICE_PRIORITY is False, "narration jamais suspendue par le micro (STT non fiable)"
         assert settings.CLAUDE_INTENT_MODEL == 'claude-haiku-4-5', "classification intention rapide"
         assert settings.CLAUDE_MAX_TOKENS      == 300, "réponses à la demande riches"
-        assert settings.CLAUDE_SCENE_AUTO_MAX_TOKENS == 80, "narration de fond courte"
+        assert settings.CLAUDE_SCENE_AUTO_MAX_TOKENS == 60, "narration de fond courte (~6-7s, rotation rapide)"
         assert settings.CLAUDE_IMG_MAX_PX      == 1568
         assert settings.CLAUDE_IMG_QUALITY     == 90
         assert settings.CONV_MEMORY_TURNS      == 15
