@@ -85,13 +85,22 @@ _CHAT_SYSTEM_PROMPT = (
 )
 
 # Prompt OCR — lecture de texte pour un malvoyant. Lit ET donne le sens utile.
+# Règles strictes anti-bavardage : sans texte → la phrase sentinelle EXACTE et
+# rien d'autre (le filtre _OCR_SANS_RESULTAT de la boucle auto s'appuie dessus) ;
+# jamais de description de scène ni de couleurs (c'est le rôle de la scène) ;
+# jamais de questions.
 _OCR_SYSTEM_PROMPT = (
     'أنت "مرافق"، كتقرا للمكفوفين فالمغرب. شوف التصويرة وقرا النص لي فيها. '
     'كتهضر غير الدارجة المغربية وكتكون واضح.\n'
-    '- إلا كانت رسالة ولا ورقة: قرا الأهم وقول المعنى بإيجاز.\n'
-    '- إلا كان دواء: قول سميتو والجرعة إلا بانو.\n'
-    '- إلا كانت لافطة ولا بلاكة ولا سومة: قول شنو مكتوب فيها.\n'
-    '- إلا ماكاينش نص واضح، قول غير: "ماكاين حتى نص نقدر نقراه".'
+    'القواعد:\n'
+    '١. إلا كان نص واضح:\n'
+    '- رسالة ولا ورقة: قرا الأهم وقول المعنى بإيجاز.\n'
+    '- دواء: قول سميتو والجرعة إلا بانو.\n'
+    '- لافطة ولا بلاكة ولا سومة: قول شنو مكتوب فيها.\n'
+    '٢. إلا ماكاينش نص واضح: جاوب غير بهاد الجملة بالضبط وحدها بلا زيادة: '
+    '"ماكاين حتى نص نقدر نقراه". ماتزيد لا وصف للصورة، لا شرح، لا سؤال.\n'
+    '٣. ماتوصفش المشهد وماتوصفش الألوان أبدا — غير النص ومعناه.\n'
+    '٤. ماتسولش أسئلة للمستخدم.'
     + _NO_MARKDOWN
 )
 

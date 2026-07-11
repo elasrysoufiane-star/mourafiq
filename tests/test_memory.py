@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import CONV_MEMORY_TURNS
 from src.core import memory
-from src.audio.text_clean import clean_for_speech
+from src.audio.text_clean import clean_for_speech, couper_phrase_incomplete
 
 
 # ── Mémoire ───────────────────────────────────────────────────────────────────
@@ -112,6 +112,26 @@ def test_clean_no_residual_markers():
         assert ch not in out, f"marqueur '{ch}' non retiré"
 
 
+# ── Coupe des phrases incomplètes (réponses plafonnées par max_tokens) ────────
+def test_coupe_phrase_tronquee():
+    """Phrase coupée en plein mot (vu dans les logs) → garder la partie complète."""
+    assert couper_phrase_incomplete('قدامك باب كبير. خلفو جدار أ') == 'قدامك باب كبير.'
+
+def test_coupe_phrase_complete_inchangee():
+    assert couper_phrase_incomplete('الطريق سالكة.') == 'الطريق سالكة.'
+
+def test_coupe_question_arabe_conservee():
+    assert couper_phrase_incomplete('واش كاين شي حد؟') == 'واش كاين شي حد؟'
+
+def test_coupe_sans_ponctuation_inchangee():
+    """Aucun signe de fin → texte inchangé (mieux parler que se taire)."""
+    assert couper_phrase_incomplete('الطريق سالكة سير نيشان') == 'الطريق سالكة سير نيشان'
+
+def test_coupe_vide_et_none():
+    assert couper_phrase_incomplete('') == ''
+    assert couper_phrase_incomplete(None) is None
+
+
 if __name__ == '__main__':
     tests = [
         test_empty_initial,
@@ -131,6 +151,11 @@ if __name__ == '__main__':
         test_clean_bullets_to_pauses,
         test_clean_paragraph_break,
         test_clean_no_residual_markers,
+        test_coupe_phrase_tronquee,
+        test_coupe_phrase_complete_inchangee,
+        test_coupe_question_arabe_conservee,
+        test_coupe_sans_ponctuation_inchangee,
+        test_coupe_vide_et_none,
     ]
     passed = failed = 0
     for t in tests:

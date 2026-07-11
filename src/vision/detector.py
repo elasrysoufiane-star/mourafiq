@@ -11,13 +11,24 @@ from concurrent.futures import ThreadPoolExecutor
 from config.settings import AUTO_DESCRIBE_INTERVAL, VOICE_PRIORITY
 from src.core import state
 from src.audio.speaker import parler
+from src.audio.text_clean import couper_phrase_incomplete
 from src.vision.camera import capturer
 
 # Phrases « rien à lire » communes aux deux providers OCR — Tesseract renvoie
-# l'une des deux exactement, Claude une variante qui commence pareil (voir
-# _local_ocr et _OCR_SYSTEM_PROMPT dans claude_client.py). Sert à ne PAS
-# annoncer ces phrases creuses à chaque cycle de la boucle auto (bruyant).
-_OCR_SANS_RESULTAT = ('ماكاين حتى نص', 'ماقدرتش نقرا')
+# l'une exactement, Claude la phrase sentinelle du prompt (_OCR_SYSTEM_PROMPT)
+# mais parfois avec des VARIANTES de formulation (« ماكاينش فيها حتى نص... »,
+# vu dans les logs réels : la variante échappait au filtre et la phrase creuse
+# était parlée à chaque cycle). Sert à ne PAS annoncer ces réponses vides.
+_OCR_SANS_RESULTAT = (
+    'ماكاين حتى نص',        # sentinelle exacte du prompt
+    'ماكاينش فيها حتى نص',  # variante observée (log 2026-07-11)
+    'ماكاينش حتى نص',
+    'ما كاين حتى نص',
+    'ماكاين أي نص',
+    'ماكاينش أي نص',
+    'ماكاين أي كتابة',
+    'ماقدرتش نقرا',         # Tesseract indisponible
+)
 
 
 def _attendre_parole_finie(max_s: float = 20.0) -> None:
@@ -84,14 +95,16 @@ def mode_auto_scene() -> None:
             futur_scene = executor.submit(describe_scene, img)
             futur_texte = executor.submit(read_text, img, remember=False)
 
-            desc = futur_scene.result()
+            # Les réponses plafonnées par max_tokens tombent souvent en plein
+            # mot → couper à la dernière phrase complète (TTS propre).
+            desc = couper_phrase_incomplete(futur_scene.result())
             # Une sortie audio a pu démarrer pendant l'appel → re-vérifier
             # avant de prendre la parole.
             _attendre_parole_finie()
             if desc:
                 parler(desc)
 
-            texte = futur_texte.result()
+            texte = couper_phrase_incomplete(futur_texte.result())
             if texte and not any(s in texte for s in _OCR_SANS_RESULTAT):
                 _attendre_parole_finie()
                 parler(texte)

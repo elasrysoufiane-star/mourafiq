@@ -35,3 +35,23 @@ def clean_for_speech(texte: str) -> str:
     t = t.replace('\n', '، ')         # ligne suivante → courte pause
     t = _MULTI_SPACE.sub(' ', t)
     return t.strip(' ،.')
+
+
+# Fins de phrase (latin + arabe). La virgule n'en fait pas partie : couper à
+# une virgule laisserait une idée en suspens.
+_FIN_PHRASE = ('.', '!', '؟', '?', '…')
+
+
+def couper_phrase_incomplete(texte: str) -> str:
+    """Coupe la DERNIÈRE phrase si elle est incomplète — les réponses de la
+    boucle AutoScene sont plafonnées par max_tokens et tombent souvent en plein
+    mot (« خلفو جدار أ ») : le TTS lisait des phrases cassées. On garde jusqu'au
+    dernier signe de fin de phrase. S'il n'y en a aucun, texte inchangé
+    (mieux vaut une phrase imparfaite que le silence)."""
+    if not texte:
+        return texte
+    t = texte.rstrip()
+    if t.endswith(_FIN_PHRASE):
+        return t
+    coupe = max(t.rfind(c) for c in _FIN_PHRASE)
+    return t[:coupe + 1] if coupe > 0 else t
