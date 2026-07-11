@@ -21,8 +21,9 @@ Thread-safe : le thread conversation et le thread auto-scene peuvent tous deux
 appeler Claude. Importable sur Windows sans matériel (threading + config).
 """
 import threading
+import time
 
-from config.settings import CONV_MEMORY_TURNS
+from config.settings import CONV_MEMORY_TURNS, LAST_IMAGE_TTL
 
 _lock = threading.Lock()
 _history = []  # liste de {'role': 'user'|'assistant', 'content': str}
@@ -30,10 +31,12 @@ _history = []  # liste de {'role': 'user'|'assistant', 'content': str}
 # question chat suivante → suivi VISUEL (« شنو كانت الحاجة الزرقاء؟ ») même si la
 # question arrive en texte. Une seule image (la plus récente) ; jamais dans
 # l'historique (qui reste texte + alternance stricte). La boucle auto de fond
-# ne l'alimente pas (remember=False). Peut être un peu obsolète si l'utilisateur
-# a bougé — mais un suivi est presque toujours immédiat. Remplacée à chaque
-# nouvelle vue à la demande, effacée par reset().
+# ne l'alimente pas (remember=False). EXPIRE après LAST_IMAGE_TTL secondes :
+# un suivi est presque toujours immédiat — au-delà l'image est périmée
+# (l'utilisateur a bougé) et coûterait des tokens image à chaque question chat.
+# Remplacée à chaque nouvelle vue à la demande, effacée par reset().
 _last_image = None
+_last_image_ts = 0.0
 
 
 def get_history() -> list:
@@ -45,15 +48,20 @@ def get_history() -> list:
 
 def set_last_image(data_b64) -> None:
     """Mémorise la dernière image vue à la demande (JPEG base64). None efface."""
-    global _last_image
+    global _last_image, _last_image_ts
     with _lock:
         _last_image = data_b64
+        _last_image_ts = time.time()
 
 
 def get_last_image():
     """Dernière image vue à la demande (base64) ou None. Sert de contexte visuel
-    à la question chat suivante."""
+    à la question chat suivante. None si plus vieille que LAST_IMAGE_TTL."""
+    global _last_image
     with _lock:
+        if _last_image and (LAST_IMAGE_TTL <= 0
+                            or time.time() - _last_image_ts > LAST_IMAGE_TTL):
+            _last_image = None
         return _last_image
 
 
@@ -75,7 +83,8 @@ def add_turn(user_text: str, assistant_text: str) -> None:
 
 def reset() -> None:
     """Vide la mémoire (nouvelle session / changement de contexte)."""
-    global _last_image
+    global _last_image, _last_image_ts
     with _lock:
         _history.clear()
         _last_image = None
+        _last_image_ts = 0.0

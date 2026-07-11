@@ -158,3 +158,9 @@ WAKE_FOLLOWUP_WINDOW = float(os.environ.get('WAKE_FOLLOWUP_WINDOW', '15'))
 # gardée (src/core/memory.py) et rattachée à la question chat suivante → suivi
 # VISUEL (« شنو كانت الحاجة الزرقاء؟ ») même quand la question est en texte.
 CONV_MEMORY_TURNS = int(os.environ.get('CONV_MEMORY_TURNS', '15'))
+
+# Durée de vie (secondes) de la dernière image vue à la demande. Un suivi visuel
+# est presque toujours immédiat ; au-delà, l'image est périmée (l'utilisateur a
+# bougé) et son renvoi à CHAQUE question chat coûte des tokens image pour rien.
+# 0 = jamais gardée.
+LAST_IMAGE_TTL = float(os.environ.get('LAST_IMAGE_TTL', '120'))

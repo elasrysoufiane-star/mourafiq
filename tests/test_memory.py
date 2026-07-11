@@ -85,6 +85,15 @@ def test_last_image_cleared_by_reset():
     memory.reset()
     assert memory.get_last_image() is None, "reset doit effacer la dernière image"
 
+def test_last_image_expire_apres_ttl():
+    """Au-delà de LAST_IMAGE_TTL, l'image est périmée (l'utilisateur a bougé) —
+    elle ne doit plus être rattachée aux questions chat (tokens image inutiles)."""
+    from config.settings import LAST_IMAGE_TTL
+    memory.reset()
+    memory.set_last_image('img')
+    memory._last_image_ts -= LAST_IMAGE_TTL + 1  # simule le vieillissement
+    assert memory.get_last_image() is None, "image périmée → None"
+
 
 # ── Nettoyage TTS ─────────────────────────────────────────────────────────────
 def test_clean_none_and_empty():
@@ -124,6 +133,7 @@ if __name__ == '__main__':
         test_last_image_set_get,
         test_last_image_replaced,
         test_last_image_cleared_by_reset,
+        test_last_image_expire_apres_ttl,
         test_clean_none_and_empty,
         test_clean_plain_unchanged,
         test_clean_bold,
