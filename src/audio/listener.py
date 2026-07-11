@@ -341,48 +341,60 @@ def reconnaitre_voix() -> str:
     voix    = 0  # nombre de chunks réellement vocaux (pour le filtre anti-bruit)
     timeout = 0  # chunks sans voix (reset à chaque détection vocale)
 
-    while True:
-        # Anti-écho : si l'assistant s'est mis à parler PENDANT qu'on enregistre,
-        # tout ce qu'on capte est l'écho du haut-parleur repris par le micro
-        # (le système s'entend lui-même) → on jette la capture. Le verrou au
-        # début (while conversation_active) ne couvre que l'ouverture du micro ;
-        # ce test protège la durée de l'enregistrement (AutoScene parle souvent).
-        if state.conversation_active.is_set():
-            print("Capture annulée — l'assistant parle (anti-écho)")
-            _fermer(stream, p)
-            return ''
+    try:
+        while True:
+            # Anti-écho : si l'assistant s'est mis à parler PENDANT qu'on
+            # enregistre, tout ce qu'on capte est l'écho du haut-parleur repris
+            # par le micro → on jette la capture. (AutoScene attend maintenant
+            # `user_speaking` avant de parler, donc ce cas ne devrait plus
+            # arriver en pleine phrase — garde-fou conservé.)
+            if state.conversation_active.is_set():
+                print("Capture annulée — l'assistant parle (anti-écho)")
+                state.user_speaking.clear()
+                _fermer(stream, p)
+                return ''
 
-        data = _lire_chunk(stream)
-        if data is None:
-            # Le flux s'est tu en cours de route (reconfiguration PipeWire /
-            # Bluetooth) → on ferme et on réessaie au prochain cycle, au lieu
-            # de geler le thread pour toujours (ancien comportement).
-            print('Micro muet (plus aucune donnée) — réouverture au prochain cycle')
-            _fermer(stream, p)
-            _signaler_echec_micro()
-            return ''
-        chunk  = np.frombuffer(data, dtype=np.int16)
-        volume = np.abs(chunk).mean()
+            data = _lire_chunk(stream)
+            if data is None:
+                # Le flux s'est tu en cours de route (reconfiguration PipeWire /
+                # Bluetooth) → on ferme et on réessaie au prochain cycle, au lieu
+                # de geler le thread pour toujours (ancien comportement).
+                print('Micro muet (plus aucune donnée) — réouverture au prochain cycle')
+                state.user_speaking.clear()
+                _fermer(stream, p)
+                _signaler_echec_micro()
+                return ''
+            chunk  = np.frombuffer(data, dtype=np.int16)
+            volume = np.abs(chunk).mean()
 
-        if _est_voix(data, volume, rate):
-            # Voix active
-            parole  = True
-            voix   += 1
-            silence = 0
-            timeout = 0
-            frames.append(data)
-        elif parole:
-            # Fin de phrase — attente silence pour confirmer
-            silence += 1
-            frames.append(data)
-            if silence > silence_max:
-                break
-        else:
-            # Pas encore de parole — incrémenter le timeout
-            timeout += 1
-            if timeout >= timeout_max:
-                print('Timeout écoute (8s sans voix)')
-                break
+            if _est_voix(data, volume, rate):
+                # Voix active — signaler à AutoScene que l'utilisateur parle :
+                # la narration ATTEND la fin de la phrase au lieu de la couper
+                # (sinon l'anti-écho annulait la capture → il « n'écoutait pas »).
+                if not parole:
+                    state.user_speaking.set()
+                parole  = True
+                voix   += 1
+                silence = 0
+                timeout = 0
+                frames.append(data)
+            elif parole:
+                # Fin de phrase — attente silence pour confirmer
+                silence += 1
+                frames.append(data)
+                if silence > silence_max:
+                    break
+            else:
+                # Pas encore de parole — incrémenter le timeout
+                timeout += 1
+                if timeout >= timeout_max:
+                    print('Timeout écoute (8s sans voix)')
+                    break
+    except Exception:
+        # Exception inattendue → relâcher le signal avant de propager, sinon
+        # AutoScene resterait muet (borne de sécurité côté detector en plus).
+        state.user_speaking.clear()
+        raise
 
     _fermer(stream, p)
     # Une écoute complète s'est déroulée (données reçues jusqu'au bout) → le
@@ -390,11 +402,13 @@ def reconnaitre_voix() -> str:
     _signaler_micro_ok()
 
     if not frames:
+        state.user_speaking.clear()
         return ''
 
     # Filtre anti-bruit : capture trop courte → bruit / écho / hallucination.
     if voix < min_voix_chunks:
         print('Capture trop courte — ignorée (bruit/écho)')
+        state.user_speaking.clear()
         return ''
 
     # Sauvegarde WAV au taux réel du micro (Whisper accepte tous les taux).
@@ -405,6 +419,10 @@ def reconnaitre_voix() -> str:
     wf.writeframes(b''.join(frames))
     wf.close()
 
+    # NB : user_speaking reste LEVÉ ici volontairement — une vraie phrase a été
+    # captée, la transcription + le traitement de la commande suivent. C'est
+    # mode_conversation() qui le relâche une fois la commande traitée → la
+    # narration AutoScene ne s'intercale pas entre la question et la réponse.
     return _transcrire()
 
 

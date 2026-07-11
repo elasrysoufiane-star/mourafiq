@@ -98,13 +98,14 @@ VISION_COOLDOWN    = float(os.environ.get('VISION_COOLDOWN', '3'))
 # (avec ou sans micro, que l'utilisateur parle ou non) — tourne en parallèle
 # de la conversation. Toutes les N secondes : capture → describe_scene() +
 # read_text() → parle. 0 = désactivé.
-# 4 = « YEUX PERMANENTS » (défaut 2026-07-11, jour de la présentation) : la STT
-# reste peu fiable sur le matériel actuel → la démo ne dépend PAS de la voix.
-# Toutes les 4s (dès la fin de la parole précédente) : capture → description de
-# scène + lecture de texte → voix. Le thread Conversation tourne quand même en
-# plus si un micro est là. 0 = mode à la demande (l'assistant ne parle que sur
-# commande vocale). La scène nécessite ANTHROPIC_API_KEY (pas de fallback local).
-AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '4'))
+# 15 = « YEUX PERMANENTS » avec de VRAIES fenêtres d'écoute (2026-07-11) : à 4s
+# la narration était quasi continue et le micro n'avait jamais de silence pour
+# capter l'utilisateur (sa capture était annulée par l'anti-écho dès que la
+# boucle reprenait). 15s de pause après chaque narration = ~15s pour parler.
+# En plus, la voix de l'utilisateur est PRIORITAIRE (state.user_speaking) : la
+# narration attend la fin de sa phrase + de la réponse. 0 = mode à la demande.
+# La scène nécessite ANTHROPIC_API_KEY (pas de fallback local, YOLO retiré).
+AUTO_DESCRIBE_INTERVAL = float(os.environ.get('AUTO_DESCRIBE_INTERVAL', '15'))
 
 # ── Logs runtime ──────────────────────────────────────────────────────────────
 # Capture TOUTE la sortie console (tous les print(), tous les threads) dans

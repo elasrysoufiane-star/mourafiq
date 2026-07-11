@@ -19,6 +19,19 @@ from src.vision.camera import capturer
 _OCR_SANS_RESULTAT = ('ماكاين حتى نص', 'ماقدرتش نقرا')
 
 
+def _attendre_parole_finie(max_s: float = 20.0) -> None:
+    """Attend que l'assistant ait fini de parler (conversation_active) ET que
+    l'utilisateur ait fini sa phrase + son traitement (user_speaking) — la voix
+    de l'utilisateur est PRIORITAIRE sur la narration de fond, sinon l'anti-écho
+    annulait sa capture dès que la boucle reprenait la parole (« il n'écoute
+    pas »). Borne de sécurité max_s : si un signal restait coincé (bug, bruit
+    continu classé voix), la narration reprend quand même."""
+    deadline = time.monotonic() + max_s
+    while ((state.conversation_active.is_set() or state.user_speaking.is_set())
+           and time.monotonic() < deadline):
+        time.sleep(0.2)
+
+
 def mode_auto_scene() -> None:
     """
     Boucle de description automatique — TOUJOURS active (avec ou sans micro,
@@ -49,22 +62,24 @@ def mode_auto_scene() -> None:
         try:
             time.sleep(AUTO_DESCRIBE_INTERVAL)
 
-            # ATTENDRE la fin d'une sortie audio en cours au lieu de sauter le
-            # cycle entier (l'ancien `continue` re-dormait AUTO_DESCRIBE_INTERVAL
-            # → cadence réelle 2×-4× plus lente que l'intervalle configuré dès
-            # que l'assistant parlait). La capture se fait APRÈS l'attente →
-            # image fraîche au moment où on peut effectivement parler.
-            while state.conversation_active.is_set():
-                time.sleep(0.2)
+            # ATTENDRE (au lieu de sauter le cycle entier) : fin de la sortie
+            # audio en cours ET fin de la parole de l'utilisateur — sa voix est
+            # prioritaire sur la narration. Capture APRÈS l'attente → image
+            # fraîche au moment où on peut effectivement parler.
+            _attendre_parole_finie()
 
             img = capturer()  # flux 640×480 — boucle éco, pas de still HQ ici
 
             desc = describe_scene(img)
+            # L'utilisateur a pu commencer à parler PENDANT l'appel Claude
+            # (~2-4s) → re-vérifier avant de prendre la parole.
+            _attendre_parole_finie()
             if desc:
                 parler(desc)
 
             texte = read_text(img, remember=False)
             if texte and not any(s in texte for s in _OCR_SANS_RESULTAT):
+                _attendre_parole_finie()
                 parler(texte)
 
         except Exception as e:

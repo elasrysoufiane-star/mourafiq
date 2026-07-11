@@ -31,32 +31,40 @@ def mode_conversation() -> None:
         try:
             commande = reconnaitre_voix()
 
-            if not commande:
-                continue
-
-            # Hors fenêtre de suivi → exiger le mot de réveil.
-            if WAKE_WORD_ENABLED and time.time() >= active_until:
-                if not contient_wake(commande):
-                    print('(ignoré — pas de mot de réveil)')
-                    continue
-                commande = retirer_wake(commande)
+            # user_speaking est resté levé si une vraie phrase a été captée
+            # (priorité sur la narration AutoScene pendant la transcription).
+            # On le relâche ici quoi qu'il arrive, une fois la commande
+            # traitée/ignorée — try/finally : continue/break y passent aussi.
+            try:
                 if not commande:
-                    # Juste « مرافق » → accuse réception et ouvre la fenêtre.
-                    parler('نعم؟')
-                    active_until = time.time() + WAKE_FOLLOWUP_WINDOW
                     continue
 
-            print(f'Commande: {commande}')
-            continuer = process_command(commande)
+                # Hors fenêtre de suivi → exiger le mot de réveil.
+                if WAKE_WORD_ENABLED and time.time() >= active_until:
+                    if not contient_wake(commande):
+                        print('(ignoré — pas de mot de réveil)')
+                        continue
+                    commande = retirer_wake(commande)
+                    if not commande:
+                        # Juste « مرافق » → accuse réception et ouvre la fenêtre.
+                        parler('نعم؟')
+                        active_until = time.time() + WAKE_FOLLOWUP_WINDOW
+                        continue
 
-            if not continuer:
-                break
+                print(f'Commande: {commande}')
+                continuer = process_command(commande)
 
-            # Rouvre la fenêtre de suivi après chaque commande exécutée.
-            active_until = time.time() + WAKE_FOLLOWUP_WINDOW
+                if not continuer:
+                    break
+
+                # Rouvre la fenêtre de suivi après chaque commande exécutée.
+                active_until = time.time() + WAKE_FOLLOWUP_WINDOW
+            finally:
+                state.user_speaking.clear()
 
         except Exception as e:
-            # Sécurité : libérer l'event si exception pendant parler()
+            # Sécurité : libérer les events si exception pendant parler()
             state.conversation_active.clear()
+            state.user_speaking.clear()
             print(f'Erreur conversation: {e}')
             time.sleep(1)

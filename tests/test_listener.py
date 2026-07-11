@@ -178,6 +178,14 @@ def test_annonce_panne_micro_une_fois_puis_retour():
          listener._panne_annoncee) = anciens
 
 
+def test_user_speaking_event_existe():
+    """state.user_speaking (priorité voix utilisateur sur la narration) doit
+    être un Event, initialement non levé."""
+    import threading
+    assert isinstance(state.user_speaking, threading.Event)
+    assert not state.user_speaking.is_set(), 'non levé au repos'
+
+
 def test_micro_ok_sans_panne_silencieux():
     """Écoute réussie SANS panne préalable → aucune annonce (pas de bavardage)."""
     annonces = []
@@ -213,6 +221,7 @@ if __name__ == '__main__':
         test_lire_chunk_ok,
         test_lire_chunk_muet_retourne_none,
         test_annonce_panne_micro_une_fois_puis_retour,
+        test_user_speaking_event_existe,
         test_micro_ok_sans_panne_silencieux,
     ]
     passed = 0

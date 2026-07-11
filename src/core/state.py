@@ -13,6 +13,14 @@ audio_lock  = threading.Lock()   # sérialise tous les appels parler()
 # Il est activé uniquement pendant la sortie audio.
 conversation_active = threading.Event()
 
+# L'utilisateur est EN TRAIN de parler (le micro enregistre une phrase).
+# Géré par listener.reconnaitre_voix() (set à la première détection de voix,
+# clear à la fin de la capture — try/finally, jamais bloqué). AutoScene le
+# consulte pour NE PAS couper la parole de l'utilisateur avec la narration —
+# sinon la capture était annulée par l'anti-écho dès que la boucle reprenait,
+# et l'assistant « n'écoutait jamais ».
+user_speaking = threading.Event()
+
 # ── Objets matériels (initialisés par app.init()) ─────────────────────────────
 camera      = None   # Picamera2
 camera_still_cfg = None  # config still HQ (OCR / scène à la demande) — None = indisponible
